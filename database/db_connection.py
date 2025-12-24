@@ -26,7 +26,7 @@ class DatabaseConnection:
             'database': st.secrets["DB_NAME"],
             'user': st.secrets["DB_USER"],
             'password': st.secrets["DB_PASSWORD"],
-            'port': int(self._get_config(st.secrets["DB_PORT"], '3306')),
+            'port': int(st.secrets.get('DB_PORT', 3306)),
             'connection_timeout': 30,
             'connect_timeout': 30,
             'use_pure': True,
