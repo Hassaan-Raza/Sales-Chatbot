@@ -22,11 +22,11 @@ class DatabaseConnection:
 
         # Load config with validation
         self.config = {
-            'host': self._get_config('DB_HOST'),
-            'database': self._get_config('DB_NAME'),
-            'user': self._get_config('DB_USER'),
-            'password': self._get_config('DB_PASSWORD'),
-            'port': int(self._get_config('DB_PORT', '3306')),
+            'host': st.secrets["DB_HOST"],
+            'database': st.secrets["DB_NAME"],
+            'user': st.secrets["DB_USER"],
+            'password': st.secrets["DB_PASSWORD"],
+            'port': int(self._get_config(st.secrets["DB_PORT"], '3306')),
             'connection_timeout': 30,
             'connect_timeout': 30,
             'use_pure': True,

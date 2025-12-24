@@ -17,7 +17,7 @@ class SalesAgent:
 
     def __init__(self):
         # Initialize Groq
-        self.api_key = os.getenv('GROQ_API_KEY')
+        self.api_key = st.secrets["GROQ_API_KEY"]
         if not self.api_key:
             raise ValueError("GROQ_API_KEY not found in environment variables")
 
