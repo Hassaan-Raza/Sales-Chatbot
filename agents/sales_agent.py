@@ -253,12 +253,25 @@ CRITICAL BUSINESS RULES (Client-Specific):
     def _generate_sql(self, user_question, company_id, date_context):
         """Use LLM to generate SQL query from natural language"""
 
-        # Special handling for comparison queries
+        # Special handling for comparison queries - USE CLIENT'S EXACT PATTERNS
         user_question_lower = user_question.lower()
-        if any(phrase in user_question_lower for phrase in ['compare', 'vs', 'versus', 'comparison']):
-            if 'month' in user_question_lower and 'year' not in user_question_lower:
-                # Month comparison - use client's exact pattern
-                return f"""SELECT 
+        
+        # Month comparison detection - expanded keywords
+        is_month_comparison = (
+            ('compare' in user_question_lower or 'comparison' in user_question_lower or 'vs' in user_question_lower or 'versus' in user_question_lower) 
+            and 'month' in user_question_lower 
+            and 'year' not in user_question_lower
+        )
+        
+        # Year comparison detection
+        is_year_comparison = (
+            ('compare' in user_question_lower or 'comparison' in user_question_lower or 'vs' in user_question_lower or 'versus' in user_question_lower) 
+            and 'year' in user_question_lower
+        )
+        
+        if is_month_comparison:
+            # Return client's EXACT month comparison query
+            query = f"""SELECT 
     COALESCE(SUM(CASE 
         WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
          AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
@@ -276,9 +289,15 @@ CRITICAL BUSINESS RULES (Client-Specific):
 FROM sales_invoice
 WHERE sales_invoice.company_id = {company_id}"""
             
-            elif 'year' in user_question_lower:
-                # Year comparison - use client's exact pattern
-                return f"""SELECT 
+            print("="*80)
+            print("USING HARDCODED MONTH COMPARISON QUERY:")
+            print(query)
+            print("="*80)
+            return query
+            
+        elif is_year_comparison:
+            # Return client's EXACT year comparison query
+            query = f"""SELECT 
     COALESCE(SUM(CASE 
         WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-01-01')
          AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
@@ -295,7 +314,14 @@ WHERE sales_invoice.company_id = {company_id}"""
     END), 0) AS total_sales_last_year
 FROM sales_invoice
 WHERE sales_invoice.company_id = {company_id}"""
+            
+            print("="*80)
+            print("USING HARDCODED YEAR COMPARISON QUERY:")
+            print(query)
+            print("="*80)
+            return query
 
+        # For non-comparison queries, use LLM generation
         prompt = f"""You are a SQL expert for a sales analytics system. Generate a READ-ONLY SQL query based on the user's question.
 
 {self.schema}
@@ -518,39 +544,49 @@ Generate ONLY the SQL query following these exact patterns:"""
         is_comparison = any(field in field_list for field in ['total_sales_this_month', 'total_sales_last_month', 'total_sales_this_year', 'total_sales_last_year'])
 
         if is_comparison:
-            prompt = f"""You are a sales analytics assistant. Format this COMPARISON data into a clear report.
+            # Handle comparison formatting directly without complex LLM instructions
+            result = results[0]
+            
+            # Determine if it's month or year comparison
+            if 'total_sales_this_month' in result:
+                this_period = float(result['total_sales_this_month'])
+                last_period = float(result['total_sales_last_month'])
+                period_label = "Month"
+            else:
+                this_period = float(result['total_sales_this_year'])
+                last_period = float(result['total_sales_last_year'])
+                period_label = "Year"
+            
+            # Calculate metrics
+            difference = this_period - last_period
+            if last_period > 0:
+                percent_change = (difference / last_period) * 100
+            else:
+                percent_change = 0
+            
+            # Format response
+            trend_emoji = "📈" if difference > 0 else "📉" if difference < 0 else "➡️"
+            sign = "+" if difference > 0 else ""
+            
+            response = f"""**📊 SALES COMPARISON - This {period_label} vs Last {period_label}**
 
-USER QUESTION: {user_question}
+**This {period_label}:** ${this_period:,.2f} 💰
+**Last {period_label}:** ${last_period:,.2f} 💰
 
-QUERY RESULTS:
-{results_json}
+**Difference:** {sign}${abs(difference):,.2f} {trend_emoji}
+**Change:** {sign}{percent_change:.1f}% {trend_emoji}
 
-AVAILABLE FIELDS: {field_list}
-
-**CRITICAL REQUIREMENTS FOR COMPARISON:**
-1. Show BOTH periods clearly side-by-side
-2. Calculate the difference: Current - Previous
-3. Calculate percentage change: ((Current - Previous) / Previous) * 100
-4. Use clear formatting:
-   - This Month/Year: $X,XXX.XX
-   - Last Month/Year: $X,XXX.XX
-   - Difference: +/- $X,XXX.XX
-   - Change: +/- XX.X%
-5. Add trend indicator: 📈 (increase) or 📉 (decrease)
-6. Include actionable insight based on the trend
-
-Example format:
-**📊 SALES COMPARISON**
-
-**This Month:** $45,230.50 💰
-**Last Month:** $38,150.25 💰
-
-**Difference:** +$7,080.25 📈
-**Growth:** +18.6% 📈
-
-💡 **Insight:** Sales increased by 18.6% - maintain current strategies and consider scaling successful campaigns.
-
-Generate the comparison report:"""
+"""
+            
+            # Add insight
+            if difference > 0:
+                response += f"💡 **Insight:** Sales increased by {percent_change:.1f}% - excellent performance! Maintain current strategies and consider scaling successful initiatives."
+            elif difference < 0:
+                response += f"⚠️ **Insight:** Sales decreased by {abs(percent_change):.1f}% - review strategies and identify areas for improvement to recover growth."
+            else:
+                response += "ℹ️ **Insight:** Sales remained stable - consider new growth initiatives to boost performance."
+            
+            return response
         else:
             prompt = f"""You are a sales analytics assistant. Format this summary data into a clear, concise report.
 
@@ -569,15 +605,16 @@ AVAILABLE FIELDS: {field_list}
 4. Format numbers: Currency $1,234.56, Quantities 1,234, Percentages 45.2%
 5. Keep it concise - this is a SUMMARY, not a detailed list
 6. Add 1 brief actionable insight
+7. Do NOT generate any SQL queries - only format the provided data
 
 Generate the summary:"""
 
-        try:
-            formatted_text = self._call_groq(prompt, max_tokens=600)
-            return formatted_text
-        except Exception as e:
-            print(f"Error formatting with LLM: {e}")
-            return self._basic_format_results(results, date_context)
+            try:
+                formatted_text = self._call_groq(prompt, max_tokens=600)
+                return formatted_text
+            except Exception as e:
+                print(f"Error formatting with LLM: {e}")
+                return self._basic_format_results(results, date_context)
 
     def _basic_format_results(self, results, date_context):
         """Fallback basic formatting"""
