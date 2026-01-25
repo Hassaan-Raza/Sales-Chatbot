@@ -253,6 +253,49 @@ CRITICAL BUSINESS RULES (Client-Specific):
     def _generate_sql(self, user_question, company_id, date_context):
         """Use LLM to generate SQL query from natural language"""
 
+        # Special handling for comparison queries
+        user_question_lower = user_question.lower()
+        if any(phrase in user_question_lower for phrase in ['compare', 'vs', 'versus', 'comparison']):
+            if 'month' in user_question_lower and 'year' not in user_question_lower:
+                # Month comparison - use client's exact pattern
+                return f"""SELECT 
+    COALESCE(SUM(CASE 
+        WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
+         AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
+         AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+        THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
+        ELSE 0
+    END), 0) AS total_sales_this_month,
+    COALESCE(SUM(CASE 
+        WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE() - INTERVAL 1 MONTH, '%Y-%m-01')
+         AND sales_invoice.invoice_date < DATE_FORMAT(CURDATE(), '%Y-%m-01')
+         AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+        THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
+        ELSE 0
+    END), 0) AS total_sales_last_month
+FROM sales_invoice
+WHERE sales_invoice.company_id = {company_id}"""
+            
+            elif 'year' in user_question_lower:
+                # Year comparison - use client's exact pattern
+                return f"""SELECT 
+    COALESCE(SUM(CASE 
+        WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-01-01')
+         AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
+         AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+        THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
+        ELSE 0
+    END), 0) AS total_sales_this_year,
+    COALESCE(SUM(CASE 
+        WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE() - INTERVAL 1 YEAR, '%Y-01-01')
+         AND sales_invoice.invoice_date < DATE_FORMAT(CURDATE(), '%Y-01-01')
+         AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+        THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
+        ELSE 0
+    END), 0) AS total_sales_last_year
+FROM sales_invoice
+WHERE sales_invoice.company_id = {company_id}"""
+
         prompt = f"""You are a SQL expert for a sales analytics system. Generate a READ-ONLY SQL query based on the user's question.
 
 {self.schema}
@@ -297,6 +340,12 @@ A: SELECT SUM(sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)) AS tot
 
 Q: "What are my total sales this month?"
 A: SELECT SUM(sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)) AS total_sales FROM sales_invoice WHERE sales_invoice.company_id = {company_id} AND sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+
+Q: "Compare sales this month vs last month" OR "Compare this month with last month"
+A: SELECT COALESCE(SUM(CASE WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled') THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0) ELSE 0 END), 0) AS total_sales_this_month, COALESCE(SUM(CASE WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE() - INTERVAL 1 MONTH, '%Y-%m-01') AND sales_invoice.invoice_date < DATE_FORMAT(CURDATE(), '%Y-%m-01') AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled') THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0) ELSE 0 END), 0) AS total_sales_last_month FROM sales_invoice WHERE sales_invoice.company_id = {company_id}
+
+Q: "Compare sales this year vs last year"
+A: SELECT COALESCE(SUM(CASE WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-01-01') AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled') THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0) ELSE 0 END), 0) AS total_sales_this_year, COALESCE(SUM(CASE WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE() - INTERVAL 1 YEAR, '%Y-01-01') AND sales_invoice.invoice_date < DATE_FORMAT(CURDATE(), '%Y-01-01') AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled') THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0) ELSE 0 END), 0) AS total_sales_last_year FROM sales_invoice WHERE sales_invoice.company_id = {company_id}
 
 Q: "Who are my highest revenue customers?"
 A: SELECT c.company AS customer_name, SUM(si.total - COALESCE(si.total_tax, 0)) AS total_revenue FROM sales_invoice si JOIN contacts c ON c.contact_id = si.customer_id WHERE si.company_id = {company_id} AND si.status NOT IN ('draft', 'draft_return', 'return', 'canceled') GROUP BY si.customer_id, c.company ORDER BY total_revenue DESC LIMIT 10
@@ -465,7 +514,45 @@ Generate ONLY the SQL query following these exact patterns:"""
                 available_fields.update(row.keys())
         field_list = ", ".join(available_fields)
 
-        prompt = f"""You are a sales analytics assistant. Format this summary data into a clear, concise report.
+        # Check if this is a comparison query
+        is_comparison = any(field in field_list for field in ['total_sales_this_month', 'total_sales_last_month', 'total_sales_this_year', 'total_sales_last_year'])
+
+        if is_comparison:
+            prompt = f"""You are a sales analytics assistant. Format this COMPARISON data into a clear report.
+
+USER QUESTION: {user_question}
+
+QUERY RESULTS:
+{results_json}
+
+AVAILABLE FIELDS: {field_list}
+
+**CRITICAL REQUIREMENTS FOR COMPARISON:**
+1. Show BOTH periods clearly side-by-side
+2. Calculate the difference: Current - Previous
+3. Calculate percentage change: ((Current - Previous) / Previous) * 100
+4. Use clear formatting:
+   - This Month/Year: $X,XXX.XX
+   - Last Month/Year: $X,XXX.XX
+   - Difference: +/- $X,XXX.XX
+   - Change: +/- XX.X%
+5. Add trend indicator: 📈 (increase) or 📉 (decrease)
+6. Include actionable insight based on the trend
+
+Example format:
+**📊 SALES COMPARISON**
+
+**This Month:** $45,230.50 💰
+**Last Month:** $38,150.25 💰
+
+**Difference:** +$7,080.25 📈
+**Growth:** +18.6% 📈
+
+💡 **Insight:** Sales increased by 18.6% - maintain current strategies and consider scaling successful campaigns.
+
+Generate the comparison report:"""
+        else:
+            prompt = f"""You are a sales analytics assistant. Format this summary data into a clear, concise report.
 
 USER QUESTION: {user_question}
 PERIOD: {date_context['label']}
