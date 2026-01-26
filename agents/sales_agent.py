@@ -253,358 +253,288 @@ CRITICAL BUSINESS RULES (Client-Specific):
     def _generate_sql(self, user_question, company_id, date_context):
         """Use LLM to generate SQL query from natural language"""
 
-        # Special handling for comparison queries - USE CLIENT'S EXACT PATTERNS
         user_question_lower = user_question.lower()
 
-        # Month comparison detection - expanded keywords
+        # ============================================================================
+        # HARDCODED EXACT CLIENT QUERIES FOR PRODUCT ANALYTICS
+        # ============================================================================
+
+        # 1. TOP 10 PRODUCTS BY VALUE (REVENUE) - EXACT CLIENT QUERY
+        if any(phrase in user_question_lower for phrase in [
+            'top 10 products by value',
+            'top products by value',
+            'products by value',
+            'highest value products',
+            'products with highest revenue',
+            'products by revenue',
+            'top revenue products',
+            'highest revenue products'
+        ]):
+            query = f"""SELECT
+        p.name AS product_name,
+        SUM(ABS(s.quantity) * (sales_items.price - sales_items.discount)) AS total_sales_value
+    FROM stock s
+    JOIN products p ON s.product_id = p.product_id
+    JOIN sales_invoice si ON si.invoice_id = s.invoice_id
+    JOIN sales_items ON sales_items.invoice_id = si.invoice_id AND sales_items.product_id = s.product_id
+    WHERE s.company_id = {company_id}
+      AND s.quantity < 0
+      AND s.stock_type = 'sales'
+      AND si.status != 'canceled'
+    GROUP BY s.product_id, p.name
+    ORDER BY total_sales_value DESC
+    LIMIT 10;"""
+
+            print("=" * 80)
+            print("USING HARDCODED: Top Products By Value (Revenue)")
+            print("=" * 80)
+            return query
+
+        # 2. TOP 10 PRODUCTS BY QUANTITY - EXACT CLIENT QUERY
+        if any(phrase in user_question_lower for phrase in [
+            'top 10 products by quantity',
+            'top products by quantity',
+            'products by quantity',
+            'fast moving products',
+            'fast-moving products',
+            'top-selling products',
+            'best selling products',
+            'most sold products',
+            'highest quantity products'
+        ]):
+            query = f"""SELECT
+        p.name AS product_name,
+        SUM(ABS(s.quantity)) AS total_sold_qty
+    FROM stock s
+    JOIN products p ON s.product_id = p.product_id
+    JOIN sales_invoice si ON si.invoice_id = s.invoice_id
+    WHERE s.company_id = {company_id}
+      AND s.quantity < 0
+      AND s.stock_type = 'sales'
+      AND si.status != 'canceled'
+    GROUP BY s.product_id, p.name
+    ORDER BY total_sold_qty DESC
+    LIMIT 10;"""
+
+            print("=" * 80)
+            print("USING HARDCODED: Top Products By Quantity")
+            print("=" * 80)
+            return query
+
+        # 3. SLOW MOVING / LOWEST SELLING PRODUCTS - EXACT CLIENT QUERY
+        if any(phrase in user_question_lower for phrase in [
+            'slow moving products',
+            'slow-moving products',
+            'lowest selling products',
+            'lowest quantity products'
+        ]):
+            query = f"""SELECT
+        p.name AS product_name,
+        SUM(ABS(s.quantity)) AS total_sold_qty
+    FROM stock s
+    JOIN products p ON s.product_id = p.product_id
+    JOIN sales_invoice si ON si.invoice_id = s.invoice_id
+    WHERE s.company_id = {company_id}
+      AND s.quantity < 0
+      AND s.stock_type = 'sales'
+      AND si.status != 'canceled'
+    GROUP BY s.product_id, p.name
+    ORDER BY total_sold_qty ASC
+    LIMIT 10;"""
+
+            print("=" * 80)
+            print("USING HARDCODED: Slow Moving Products")
+            print("=" * 80)
+            return query
+
+        # ============================================================================
+        # HARDCODED EXACT CLIENT QUERIES FOR PRODUCT VALUE/RANKING
+        # ============================================================================
+
+        # 4. PRODUCT WITH HIGHEST REVENUE - EXACT CLIENT QUERY
+        if any(phrase in user_question_lower for phrase in [
+            'product with highest revenue',
+            'highest revenue product',
+            'top revenue product',
+            'product with most revenue'
+        ]):
+            query = f"""SELECT
+        p.name AS product_name,
+        SUM(ABS(s.quantity) * (si_item.price - si_item.discount)) AS total_revenue
+    FROM stock s
+    JOIN products p ON s.product_id = p.product_id
+    JOIN sales_invoice si ON si.invoice_id = s.invoice_id
+    JOIN sales_items si_item ON si_item.invoice_id = si.invoice_id AND si_item.product_id = s.product_id
+    WHERE s.company_id = {company_id}
+      AND s.stock_type = 'sales'
+      AND s.quantity < 0
+      AND si.status != 'canceled'
+    GROUP BY s.product_id, p.name
+    ORDER BY total_revenue DESC
+    LIMIT 1;"""
+
+            print("=" * 80)
+            print("USING HARDCODED: Product with Highest Revenue")
+            print("=" * 80)
+            return query
+
+        # 5. PRODUCT WITH HIGHEST PROFIT - EXACT CLIENT QUERY
+        if any(phrase in user_question_lower for phrase in [
+            'product with highest profit',
+            'highest profit product',
+            'most profitable product',
+            'best margin product'
+        ]):
+            query = f"""SELECT
+        p.name AS product_name,
+        SUM(ABS(s.quantity) * ((si_item.price - si_item.discount) - s.cost)) AS total_profit
+    FROM stock s
+    JOIN products p ON p.product_id = s.product_id
+    JOIN sales_invoice si ON si.invoice_id = s.invoice_id
+    JOIN sales_items si_item ON si_item.invoice_id = si.invoice_id AND si_item.product_id = s.product_id
+    WHERE s.company_id = {company_id}
+      AND s.stock_type = 'sales'
+      AND s.quantity < 0
+      AND si.status != 'canceled'
+    GROUP BY s.product_id, p.name
+    ORDER BY total_profit DESC
+    LIMIT 1;"""
+
+            print("=" * 80)
+            print("USING HARDCODED: Product with Highest Profit")
+            print("=" * 80)
+            return query
+
+        # ============================================================================
+        # COMPARISON QUERIES (from original code)
+        # ============================================================================
+
         is_month_comparison = (
-            ('compare' in user_question_lower or 'comparison' in user_question_lower or 'vs' in user_question_lower or 'versus' in user_question_lower)
-            and 'month' in user_question_lower
-            and 'year' not in user_question_lower
+                ('compare' in user_question_lower or 'comparison' in user_question_lower or
+                 'vs' in user_question_lower or 'versus' in user_question_lower)
+                and 'month' in user_question_lower
+                and 'year' not in user_question_lower
         )
 
-        # Year comparison detection
         is_year_comparison = (
-            ('compare' in user_question_lower or 'comparison' in user_question_lower or 'vs' in user_question_lower or 'versus' in user_question_lower)
-            and 'year' in user_question_lower
+                ('compare' in user_question_lower or 'comparison' in user_question_lower or
+                 'vs' in user_question_lower or 'versus' in user_question_lower)
+                and 'year' in user_question_lower
         )
 
         if is_month_comparison:
-            # Return client's EXACT month comparison query
             query = f"""SELECT 
-    COALESCE(SUM(CASE 
-        WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
-         AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
-         AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-        THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
-        ELSE 0
-    END), 0) AS total_sales_this_month,
-    COALESCE(SUM(CASE 
-        WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE() - INTERVAL 1 MONTH, '%Y-%m-01')
-         AND sales_invoice.invoice_date < DATE_FORMAT(CURDATE(), '%Y-%m-01')
-         AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-        THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
-        ELSE 0
-    END), 0) AS total_sales_last_month
-FROM sales_invoice
-WHERE sales_invoice.company_id = {company_id}"""
+        COALESCE(SUM(CASE 
+            WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
+             AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
+             AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+            THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
+            ELSE 0
+        END), 0) AS total_sales_this_month,
+        COALESCE(SUM(CASE 
+            WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE() - INTERVAL 1 MONTH, '%Y-%m-01')
+             AND sales_invoice.invoice_date < DATE_FORMAT(CURDATE(), '%Y-%m-01')
+             AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+            THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
+            ELSE 0
+        END), 0) AS total_sales_last_month
+    FROM sales_invoice
+    WHERE sales_invoice.company_id = {company_id}"""
 
-            print("="*80)
-            print("USING HARDCODED MONTH COMPARISON QUERY:")
-            print(query)
-            print("="*80)
+            print("=" * 80)
+            print("USING HARDCODED: Month Comparison")
+            print("=" * 80)
             return query
 
         elif is_year_comparison:
-            # Return client's EXACT year comparison query
             query = f"""SELECT 
-    COALESCE(SUM(CASE 
-        WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-01-01')
-         AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
-         AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-        THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
-        ELSE 0
-    END), 0) AS total_sales_this_year,
-    COALESCE(SUM(CASE 
-        WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE() - INTERVAL 1 YEAR, '%Y-01-01')
-         AND sales_invoice.invoice_date < DATE_FORMAT(CURDATE(), '%Y-01-01')
-         AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-        THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
-        ELSE 0
-    END), 0) AS total_sales_last_year
-FROM sales_invoice
-WHERE sales_invoice.company_id = {company_id}"""
+        COALESCE(SUM(CASE 
+            WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-01-01')
+             AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
+             AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+            THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
+            ELSE 0
+        END), 0) AS total_sales_this_year,
+        COALESCE(SUM(CASE 
+            WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE() - INTERVAL 1 YEAR, '%Y-01-01')
+             AND sales_invoice.invoice_date < DATE_FORMAT(CURDATE(), '%Y-01-01')
+             AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+            THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
+            ELSE 0
+        END), 0) AS total_sales_last_year
+    FROM sales_invoice
+    WHERE sales_invoice.company_id = {company_id}"""
 
-            print("="*80)
-            print("USING HARDCODED YEAR COMPARISON QUERY:")
-            print(query)
-            print("="*80)
+            print("=" * 80)
+            print("USING HARDCODED: Year Comparison")
+            print("=" * 80)
             return query
 
-        # For non-comparison queries, use LLM generation with intelligent understanding
-        prompt = """You are an expert SQL query generator for a sales analytics system. Your job is to UNDERSTAND the user's intent and generate the correct SQL query.
+        # ============================================================================
+        # FIX COMMON SQL ERRORS BEFORE RETURNING
+        # ============================================================================
 
-""" + self.schema + f"""
+        # Generate SQL with LLM for other queries
+        sql_query = self._generate_sql_with_llm(user_question, company_id, date_context)
 
-USER QUESTION: "{user_question}"
-
-CONTEXT:
-- Company ID: {company_id}
-- Date Range: {date_context['label']}
-- Date Filter: {date_context['filter']}
-
-**STEP 1: UNDERSTAND THE INTENT**
-First, analyze what the user is asking for:
-- What entity? (sales, customers, products, categories, branches, salespeople, invoices)
-- What metric? (revenue, quantity, count, profit, margin)
-- What aggregation? (total/sum, average, count, maximum, minimum, list)
-- What ranking? (top/highest/best, bottom/lowest/worst, all items)
-- What time period? (today, this month, this year, trend, comparison)
-
-**CRITICAL: Distinguish between QUANTITY vs VALUE:**
-
-QUANTITY/UNITS Keywords (count of items sold):
-- "quantity", "units", "pieces", "items sold", "volume", "stock sold"
-- "how many items", "number of units", "count of products"
-- "fast moving" (implies volume/quantity)
-- USE: stock table with SUM(ABS(s.quantity))
-
-VALUE/REVENUE Keywords (money/dollars):
-- "value", "revenue", "sales value", "dollar amount", "money", "worth"
-- "sales" (by default means revenue unless specified otherwise)
-- "earnings", "income", "turnover"
-- USE: stock + sales_items with price calculation
-
-PROFIT Keywords:
-- "profit", "margin", "profitability", "earnings after cost"
-- USE: stock + sales_items with (price - cost) calculation
-
-**DEFAULT RULES:**
-- "top products" alone = quantity (most sold items)
-- "top products by value" = revenue (money earned)
-- "top products by revenue" = revenue
-- "top products by sales" = revenue (sales means money)
-- "top products by quantity" = quantity
-- "top products by units" = quantity
-- "best selling products" = quantity (selling = volume)
-- "highest revenue products" = revenue
-
-**STEP 2: APPLY BUSINESS RULES**
-
-Revenue Calculations:
-- ALWAYS use: `SUM(si.total - COALESCE(si.total_tax, 0))` for net sales/revenue
-- Status filter: `si.status NOT IN ('draft', 'draft_return', 'return', 'canceled')`
-
-Product Analytics Decision Tree:
-- If asking about QUANTITY/UNITS sold → Use stock table:
-  ```
-  FROM stock s
-  JOIN products p ON s.product_id = p.product_id
-  JOIN sales_invoice si ON si.invoice_id = s.invoice_id
-  WHERE s.company_id = {company_id}
-    AND s.quantity < 0
-    AND s.stock_type = 'sales'
-    AND si.status != 'canceled'
-  ```
-  Then: `SUM(ABS(s.quantity))` for quantity
-
-- If asking about REVENUE/VALUE → Join stock + sales_items (MUST match product_id!):
-  ```
-  FROM stock s
-  JOIN products p ON s.product_id = p.product_id  
-  JOIN sales_invoice si ON si.invoice_id = s.invoice_id
-  JOIN sales_items si_item ON si_item.invoice_id = si.invoice_id AND si_item.product_id = s.product_id
-  WHERE s.company_id = {company_id}
-    AND s.stock_type = 'sales'
-    AND s.quantity < 0
-    AND si.status != 'canceled'
-  ```
-  Then: `SUM(ABS(s.quantity) * (si_item.price - si_item.discount))` for revenue
-  **CRITICAL:** Must join sales_items with BOTH invoice_id AND product_id!
-
-- If asking about PROFIT → Same as revenue but:
-  `SUM(ABS(s.quantity) * ((si_item.price - si_item.discount) - s.cost))` for profit
-  **CRITICAL:** Must join sales_items with BOTH invoice_id AND product_id!
-
-Field Name Mapping:
-- Customer name → `c.company` (NOT c.name!)
-- Warehouse/Branch name → `w.title`
-- Category name → `pc.title` (NOT pc.name!)
-- Salesperson → `CONCAT(u.firstname, ' ', u.lastname)` with filter `si.salesman > 0`
-
-Ranking Keywords:
-- "highest/top/best/maximum/most/peak" → `ORDER BY [metric] DESC LIMIT 1` (or LIMIT 10 for lists)
-- "lowest/bottom/worst/minimum/least/slowest" → `ORDER BY [metric] ASC LIMIT 1` (or LIMIT 10 for lists)
-- "show/list/display/all" → `ORDER BY [metric] DESC LIMIT 10`
-
-Count vs Sum:
-- "total number/count/how many" → Use `COUNT(invoice_id)` or `COUNT(DISTINCT ...)`
-- "total sales/revenue/amount" → Use `SUM(...)`
-
-**STEP 3: GENERATE THE QUERY**
-
-Date Filtering:
-- Apply date filter from context: """ + date_context['filter'] + """
-- Use DATE_FORMAT() and CURDATE() patterns as shown in schema
-
-Output Requirements:
-- Generate ONLY the SQL query
-- No explanations, no markdown formatting
-- No comments in the SQL
-- Use proper JOINs (LEFT JOIN for optional relationships)
-- Always filter by company_id = {company_id}
-- Use meaningful column aliases (total_sales, product_name, customer_name, etc.)
-
-**EXAMPLES FOR PATTERN LEARNING:**
-
-Example 1 - Understanding "category with least amount of sales":
-- Intent: Find category with MINIMUM sales
-- Entity: Categories (products_category)
-- Metric: Quantity sold (use stock table)
-- Ranking: Minimum (ORDER BY ASC LIMIT 1)
-- Query: SELECT pc.title AS category_name, SUM(ABS(s.quantity)) AS total_sold_qty FROM stock s JOIN products p ON p.product_id = s.product_id JOIN products_category pc ON pc.category_id = p.category_id JOIN sales_invoice si ON si.invoice_id = s.invoice_id WHERE s.company_id = {company_id} AND s.stock_type = 'sales' AND s.quantity < 0 AND si.status != 'canceled' GROUP BY pc.category_id, pc.title ORDER BY total_sold_qty ASC LIMIT 1
-
-Example 2 - Understanding "who spends the most":
-- Intent: Find customer with MAXIMUM revenue
-- Entity: Customers (contacts)
-- Metric: Revenue (use sales_invoice)
-- Ranking: Maximum (ORDER BY DESC)
-- Query: SELECT c.company AS customer_name, SUM(si.total - COALESCE(si.total_tax, 0)) AS total_revenue FROM sales_invoice si JOIN contacts c ON c.contact_id = si.customer_id WHERE si.company_id = {company_id} AND si.status NOT IN ('draft', 'draft_return', 'return', 'canceled') GROUP BY si.customer_id, c.company ORDER BY total_revenue DESC LIMIT 10
-
-Example 3 - Understanding "fast moving products":
-- Intent: Products with HIGH quantity sales
-- Entity: Products
-- Metric: Quantity (use stock table)
-- Ranking: Top performers (ORDER BY DESC)
-- Query: SELECT p.name AS product_name, SUM(ABS(s.quantity)) AS total_sold_qty FROM stock s JOIN products p ON s.product_id = p.product_id JOIN sales_invoice si ON si.invoice_id = s.invoice_id WHERE s.company_id = {company_id} AND s.quantity < 0 AND s.stock_type = 'sales' AND si.status != 'canceled' GROUP BY s.product_id, p.name ORDER BY total_sold_qty DESC LIMIT 10
-
-Q: "What are my top 10 products by value?"
-A: SELECT p.name AS product_name, SUM(ABS(s.quantity) * (sales_items.price - sales_items.discount)) AS total_sales_value FROM stock s JOIN products p ON s.product_id = p.product_id JOIN sales_invoice si ON si.invoice_id = s.invoice_id JOIN sales_items ON sales_items.invoice_id = si.invoice_id AND sales_items.product_id = s.product_id WHERE s.company_id = {company_id} AND s.quantity < 0 AND s.stock_type = 'sales' AND si.status != 'canceled' GROUP BY s.product_id, p.name ORDER BY total_sales_value DESC LIMIT 10
-
-Q: "What are my top 10 products by quantity?"
-A: SELECT p.name AS product_name, SUM(ABS(s.quantity)) AS total_sold_qty FROM stock s JOIN products p ON s.product_id = p.product_id JOIN sales_invoice si ON si.invoice_id = s.invoice_id WHERE s.company_id = {company_id} AND s.quantity < 0 AND s.stock_type = 'sales' AND si.status != 'canceled' GROUP BY s.product_id, p.name ORDER BY total_sold_qty DESC LIMIT 10
-
-Q: "Show me fast moving products"
-A: SELECT p.name AS product_name, SUM(ABS(s.quantity)) AS total_sold_qty FROM stock s JOIN products p ON s.product_id = p.product_id JOIN sales_invoice si ON si.invoice_id = s.invoice_id WHERE s.company_id = {company_id} AND s.quantity < 0 AND s.stock_type = 'sales' AND si.status != 'canceled' GROUP BY s.product_id, p.name ORDER BY total_sold_qty DESC LIMIT 10
-Now, analyze the user's question and generate the appropriate SQL query:
-
-{self.schema}
-
-USER QUESTION: "{user_question}"
-
-CONTEXT:
-- Company ID: {company_id}
-- Date Range: {date_context['label']}
-- Date Filter: {date_context['filter']}
-
-CRITICAL REQUIREMENTS - MUST FOLLOW CLIENT'S PATTERNS:
-
-1. **REVENUE CALCULATION:** Always use `SUM(si.total - COALESCE(si.total_tax, 0))` for net sales
-2. **STATUS FILTER:** Always use `si.status NOT IN ('draft', 'draft_return', 'return', 'canceled')`
-3. **CUSTOMER NAME:** Use `c.company` (NOT c.name!)
-4. **WAREHOUSE NAME:** Use `w.title` for warehouse names
-5. **SALESPERSON:** Use `CONCAT(u.firstname, ' ', u.lastname)` and filter `si.salesman > 0`
-6. **CATEGORY NAME:** Use `c.title` or `pc.title` for category (NOT name!)
-7. **PRODUCT ANALYTICS:** For product quantity/sales, use:
-   ```
-   FROM stock s
-   JOIN products p ON s.product_id = p.product_id
-   JOIN sales_invoice si ON si.invoice_id = s.invoice_id
-   WHERE s.company_id = {company_id}
-     AND s.quantity < 0
-     AND s.stock_type = 'sales'
-     AND si.status != 'canceled'
-   ```
-   Then use `SUM(ABS(s.quantity))` for total quantity sold
-
-8. **COUNT QUERIES:** For counting records, use COUNT(primary_key), not SUM():
-   - Invoice count: `COUNT(invoice_id)` or `COUNT(si.invoice_id)`
-   - Customer count: `COUNT(DISTINCT customer_id)` or `COUNT(DISTINCT contact_id)`
-   - Product count: `COUNT(DISTINCT product_id)`
-
-9. **DATE FILTERING:** Use client's pattern with CURDATE() and DATE_FORMAT()
-10. Always include `WHERE [table].company_id = {company_id}`
-11. Use LEFT JOIN for optional relationships
-12. LIMIT 10 for list queries
-13. Return ONLY the SQL query - no explanations
-
-EXAMPLES (Client's Actual Patterns):
-
-Q: "What are my total sales today?"
-A: SELECT SUM(sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)) AS total_sales FROM sales_invoice WHERE sales_invoice.company_id = {company_id} AND sales_invoice.invoice_date >= CURDATE() AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-
-Q: "What are my total sales this month?"
-A: SELECT SUM(sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)) AS total_sales FROM sales_invoice WHERE sales_invoice.company_id = {company_id} AND sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-
-Q: "Compare sales this month vs last month" OR "Compare this month with last month"
-A: SELECT COALESCE(SUM(CASE WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled') THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0) ELSE 0 END), 0) AS total_sales_this_month, COALESCE(SUM(CASE WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE() - INTERVAL 1 MONTH, '%Y-%m-01') AND sales_invoice.invoice_date < DATE_FORMAT(CURDATE(), '%Y-%m-01') AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled') THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0) ELSE 0 END), 0) AS total_sales_last_month FROM sales_invoice WHERE sales_invoice.company_id = {company_id}
-
-Q: "Compare sales this year vs last year"
-A: SELECT COALESCE(SUM(CASE WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-01-01') AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled') THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0) ELSE 0 END), 0) AS total_sales_this_year, COALESCE(SUM(CASE WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE() - INTERVAL 1 YEAR, '%Y-01-01') AND sales_invoice.invoice_date < DATE_FORMAT(CURDATE(), '%Y-01-01') AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled') THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0) ELSE 0 END), 0) AS total_sales_last_year FROM sales_invoice WHERE sales_invoice.company_id = {company_id}
-
-Q: "Which category has highest sales?" OR "Category with highest sales"
-A: SELECT pc.title AS category_name, SUM(ABS(s.quantity)) AS total_sold_qty FROM stock s JOIN products p ON p.product_id = s.product_id JOIN products_category pc ON pc.category_id = p.category_id JOIN sales_invoice si ON si.invoice_id = s.invoice_id WHERE s.company_id = {company_id} AND s.stock_type = 'sales' AND s.quantity < 0 AND si.status != 'canceled' GROUP BY pc.category_id, pc.title ORDER BY total_sold_qty DESC LIMIT 1
-
-Q: "Which category has lowest sales?" OR "Category with lowest sales"
-A: SELECT pc.title AS category_name, SUM(ABS(s.quantity)) AS total_sold_qty FROM stock s JOIN products p ON p.product_id = s.product_id JOIN products_category pc ON pc.category_id = p.category_id JOIN sales_invoice si ON si.invoice_id = s.invoice_id WHERE s.company_id = {company_id} AND s.stock_type = 'sales' AND s.quantity < 0 AND si.status != 'canceled' GROUP BY pc.category_id, pc.title ORDER BY total_sold_qty ASC LIMIT 1
-
-Q: "What is the total number of sales invoices?" OR "How many invoices?" OR "Total invoices"
-A: SELECT COUNT(invoice_id) AS total_sales_invoices FROM sales_invoice WHERE company_id = {company_id} AND status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-
-Q: "Who are my highest revenue customers?"
-A: SELECT c.company AS customer_name, SUM(si.total - COALESCE(si.total_tax, 0)) AS total_revenue FROM sales_invoice si JOIN contacts c ON c.contact_id = si.customer_id WHERE si.company_id = {company_id} AND si.status NOT IN ('draft', 'draft_return', 'return', 'canceled') GROUP BY si.customer_id, c.company ORDER BY total_revenue DESC LIMIT 10
-
-Q: "What are my top-selling products?"
-A: SELECT p.name AS product_name, SUM(ABS(s.quantity)) AS total_sold_qty FROM stock s JOIN products p ON s.product_id = p.product_id JOIN sales_invoice si ON si.invoice_id = s.invoice_id WHERE s.company_id = {company_id} AND s.quantity < 0 AND s.stock_type = 'sales' AND si.status != 'canceled' GROUP BY s.product_id, p.name ORDER BY total_sold_qty DESC LIMIT 10
-
-Q: "Which branch has highest sales?"
-A: SELECT w.title AS branch_name, SUM(si.total - COALESCE(si.total_tax, 0)) AS total_sales FROM sales_invoice si JOIN warehouses w ON si.warehouse_id = w.warehouse_id WHERE si.company_id = {company_id} AND si.status NOT IN ('draft', 'draft_return', 'return', 'canceled') GROUP BY si.warehouse_id, w.title ORDER BY total_sales DESC LIMIT 1
-
-Q: "Show sales by salesperson"
-A: SELECT CONCAT(u.firstname, ' ', u.lastname) AS salesperson_name, SUM(si.total - COALESCE(si.total_tax, 0)) AS total_sales FROM sales_invoice si LEFT JOIN users u ON si.salesman = u.user_id WHERE si.company_id = {company_id} AND si.salesman > 0 AND si.status NOT IN ('draft', 'draft_return', 'return', 'canceled') GROUP BY si.salesman, u.firstname, u.lastname ORDER BY total_sales DESC
-
-Q: "Which category has highest sales?"
-A: SELECT pc.title AS category_name, SUM(ABS(s.quantity)) AS total_sold_qty FROM stock s JOIN products p ON p.product_id = s.product_id JOIN products_category pc ON pc.category_id = p.category_id JOIN sales_invoice si ON si.invoice_id = s.invoice_id WHERE s.company_id = {company_id} AND s.stock_type = 'sales' AND s.quantity < 0 AND si.status != 'canceled' GROUP BY pc.category_id, pc.title ORDER BY total_sold_qty DESC LIMIT 1
-
-Generate ONLY the SQL query following these exact patterns:"""
-
-        try:
-            sql_query = self._call_groq(prompt, max_tokens=600)
-            sql_query = re.sub(r'```sql\n?', '', sql_query)
-            sql_query = re.sub(r'```\n?', '', sql_query)
-            sql_query = sql_query.strip()
-
-            print("="*80)
-            print("GENERATED SQL QUERY:")
-            print(sql_query)
-            print("="*80)
-
-            sql_query = self._fix_common_sql_errors(sql_query)
-
-            # CRITICAL FIX: Ensure sales_items join includes product_id match
-            if 'sales_items' in sql_query.lower() and 'stock' in sql_query.lower():
-                # Check if it's missing the product_id join condition
-                if 'sales_items.product_id' not in sql_query and 'si_item.product_id' not in sql_query:
-                    print("⚠️ CRITICAL FIX: Adding missing product_id join to sales_items")
-                    # Fix the join - add product_id condition
-                    sql_query = re.sub(
-                        r'(JOIN sales_items(?: (?:AS )?si_item)? ON (?:si_item\.)?invoice_id = si\.invoice_id)',
-                        r'\1 AND si_item.product_id = s.product_id',
-                        sql_query,
-                        flags=re.IGNORECASE
-                    )
-                    # Also handle if using sales_items without alias
-                    sql_query = re.sub(
-                        r'(JOIN sales_items ON sales_items\.invoice_id = si\.invoice_id)(?! AND)',
-                        r'\1 AND sales_items.product_id = s.product_id',
-                        sql_query,
-                        flags=re.IGNORECASE
-                    )
-                    print("="*80)
-                    print("FIXED SQL QUERY (added product_id join):")
-                    print(sql_query)
-                    print("="*80)
-
-            return sql_query
-
-        except Exception as e:
-            print(f"Error generating SQL: {e}")
+        if not sql_query:
             return None
+
+        # CRITICAL FIX: Ensure sales_items join includes product_id match
+        if 'sales_items' in sql_query.lower() and 'stock' in sql_query.lower():
+            # Check if it's missing the product_id join condition
+            if 'sales_items.product_id' not in sql_query and 'si_item.product_id' not in sql_query:
+                print("⚠️ CRITICAL FIX: Adding missing product_id join to sales_items")
+
+                # Fix pattern 1: sales_items with alias
+                sql_query = re.sub(
+                    r'(JOIN sales_items(?: (?:AS )?si_item)? ON (?:si_item\.)?invoice_id = (?:si\.)?invoice_id)',
+                    r'\1 AND si_item.product_id = s.product_id',
+                    sql_query,
+                    flags=re.IGNORECASE
+                )
+
+                # Fix pattern 2: sales_items without alias
+                sql_query = re.sub(
+                    r'(JOIN sales_items ON sales_items\.invoice_id = (?:si\.)?invoice_id)(?! AND)',
+                    r'\1 AND sales_items.product_id = s.product_id',
+                    sql_query,
+                    flags=re.IGNORECASE
+                )
+
+                print("=" * 80)
+                print("FIXED SQL QUERY (added product_id join):")
+                print(sql_query)
+                print("=" * 80)
+
+        # Apply other common fixes
+        sql_query = self._fix_common_sql_errors(sql_query)
+
+        return sql_query
 
     def _generate_sql_with_llm(self, user_question, company_id, date_context):
         """Fallback LLM generation for queries not in hardcoded list"""
 
         prompt = f"""Generate SQL for: "{user_question}"
-Company ID: {company_id}
-Date Filter: {date_context['filter']}
+    Company ID: {company_id}
+    Date Filter: {date_context['filter']}
 
-Use client patterns:
-- Revenue: SUM(si.total - COALESCE(si.total_tax, 0))
-- Status: NOT IN ('draft', 'draft_return', 'return', 'canceled')
-- Customer: c.company (not c.name)
-- Category: pc.title (not pc.name)
+    Use client patterns:
+    - Revenue: SUM(si.total - COALESCE(si.total_tax, 0))
+    - Status: NOT IN ('draft', 'draft_return', 'return', 'canceled')
+    - Customer: c.company (not c.name)
+    - Category: pc.title (not pc.name)
 
-Generate ONLY the SQL query:"""
+    CRITICAL REQUIREMENT FOR PRODUCT VALUE QUERIES:
+    - When calculating product revenue/profit, you MUST join sales_items with BOTH invoice_id AND product_id
+    - WRONG: JOIN sales_items ON sales_items.invoice_id = si.invoice_id
+    - CORRECT: JOIN sales_items ON sales_items.invoice_id = si.invoice_id AND sales_items.product_id = s.product_id
+
+    EXAMPLES:
+    Q: "What are my top 10 products by value?"
+    A: SELECT p.name AS product_name, SUM(ABS(s.quantity) * (sales_items.price - sales_items.discount)) AS total_sales_value FROM stock s JOIN products p ON s.product_id = p.product_id JOIN sales_invoice si ON si.invoice_id = s.invoice_id JOIN sales_items ON sales_items.invoice_id = si.invoice_id AND sales_items.product_id = s.product_id WHERE s.company_id = {company_id} AND s.quantity < 0 AND s.stock_type = 'sales' AND si.status != 'canceled' GROUP BY s.product_id, p.name ORDER BY total_sales_value DESC LIMIT 10
+
+    Generate ONLY the SQL query:"""
 
         try:
             sql_query = self._call_groq(prompt, max_tokens=600)
