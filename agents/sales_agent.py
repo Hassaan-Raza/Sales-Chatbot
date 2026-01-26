@@ -412,6 +412,34 @@ First, analyze what the user is asking for:
 - What ranking? (top/highest/best, bottom/lowest/worst, all items)
 - What time period? (today, this month, this year, trend, comparison)
 
+**CRITICAL: Distinguish between QUANTITY vs VALUE:**
+
+QUANTITY/UNITS Keywords (count of items sold):
+- "quantity", "units", "pieces", "items sold", "volume", "stock sold"
+- "how many items", "number of units", "count of products"
+- "fast moving" (implies volume/quantity)
+- USE: stock table with SUM(ABS(s.quantity))
+
+VALUE/REVENUE Keywords (money/dollars):
+- "value", "revenue", "sales value", "dollar amount", "money", "worth"
+- "sales" (by default means revenue unless specified otherwise)
+- "earnings", "income", "turnover"
+- USE: stock + sales_items with price calculation
+
+PROFIT Keywords:
+- "profit", "margin", "profitability", "earnings after cost"
+- USE: stock + sales_items with (price - cost) calculation
+
+**DEFAULT RULES:**
+- "top products" alone = quantity (most sold items)
+- "top products by value" = revenue (money earned)
+- "top products by revenue" = revenue
+- "top products by sales" = revenue (sales means money)
+- "top products by quantity" = quantity
+- "top products by units" = quantity
+- "best selling products" = quantity (selling = volume)
+- "highest revenue products" = revenue
+
 **STEP 2: APPLY BUSINESS RULES**
 
 Revenue Calculations:
@@ -768,7 +796,7 @@ Generate ONLY the SQL query following these exact patterns:"""
 **Change:** {sign}{percent_change:.1f}% {trend_emoji}
 
 """
-
+            
             # Add insight
             if difference > 0:
                 response += f"💡 **Insight:** Sales increased by {percent_change:.1f}% - excellent performance! Maintain current strategies and consider scaling successful initiatives."
@@ -776,7 +804,7 @@ Generate ONLY the SQL query following these exact patterns:"""
                 response += f"⚠️ **Insight:** Sales decreased by {abs(percent_change):.1f}% - review strategies and identify areas for improvement to recover growth."
             else:
                 response += "ℹ️ **Insight:** Sales remained stable - consider new growth initiatives to boost performance."
-
+            
             return response
         else:
             prompt = f"""You are a sales analytics assistant. Format this summary data into a clear, concise report.
