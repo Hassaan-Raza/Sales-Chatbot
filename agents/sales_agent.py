@@ -321,77 +321,6 @@ WHERE sales_invoice.company_id = {company_id}"""
             print("="*80)
             return query
 
-    def _generate_sql(self, user_question, company_id, date_context):
-        """Use LLM to generate SQL query from natural language"""
-
-        # Special handling for comparison queries - USE CLIENT'S EXACT PATTERNS
-        user_question_lower = user_question.lower()
-
-        # Month comparison detection - expanded keywords
-        is_month_comparison = (
-            ('compare' in user_question_lower or 'comparison' in user_question_lower or 'vs' in user_question_lower or 'versus' in user_question_lower)
-            and 'month' in user_question_lower
-            and 'year' not in user_question_lower
-        )
-
-        # Year comparison detection
-        is_year_comparison = (
-            ('compare' in user_question_lower or 'comparison' in user_question_lower or 'vs' in user_question_lower or 'versus' in user_question_lower)
-            and 'year' in user_question_lower
-        )
-
-        if is_month_comparison:
-            # Return client's EXACT month comparison query
-            query = f"""SELECT 
-    COALESCE(SUM(CASE 
-        WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
-         AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
-         AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-        THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
-        ELSE 0
-    END), 0) AS total_sales_this_month,
-    COALESCE(SUM(CASE 
-        WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE() - INTERVAL 1 MONTH, '%Y-%m-01')
-         AND sales_invoice.invoice_date < DATE_FORMAT(CURDATE(), '%Y-%m-01')
-         AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-        THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
-        ELSE 0
-    END), 0) AS total_sales_last_month
-FROM sales_invoice
-WHERE sales_invoice.company_id = {company_id}"""
-
-            print("="*80)
-            print("USING HARDCODED MONTH COMPARISON QUERY:")
-            print(query)
-            print("="*80)
-            return query
-
-        elif is_year_comparison:
-            # Return client's EXACT year comparison query
-            query = f"""SELECT 
-    COALESCE(SUM(CASE 
-        WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-01-01')
-         AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
-         AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-        THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
-        ELSE 0
-    END), 0) AS total_sales_this_year,
-    COALESCE(SUM(CASE 
-        WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE() - INTERVAL 1 YEAR, '%Y-01-01')
-         AND sales_invoice.invoice_date < DATE_FORMAT(CURDATE(), '%Y-01-01')
-         AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-        THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
-        ELSE 0
-    END), 0) AS total_sales_last_year
-FROM sales_invoice
-WHERE sales_invoice.company_id = {company_id}"""
-
-            print("="*80)
-            print("USING HARDCODED YEAR COMPARISON QUERY:")
-            print(query)
-            print("="*80)
-            return query
-
         # For non-comparison queries, use LLM generation with intelligent understanding
         prompt = """You are an expert SQL query generator for a sales analytics system. Your job is to UNDERSTAND the user's intent and generate the correct SQL query.
 
@@ -529,6 +458,14 @@ Example 3 - Understanding "fast moving products":
 - Ranking: Top performers (ORDER BY DESC)
 - Query: SELECT p.name AS product_name, SUM(ABS(s.quantity)) AS total_sold_qty FROM stock s JOIN products p ON s.product_id = p.product_id JOIN sales_invoice si ON si.invoice_id = s.invoice_id WHERE s.company_id = {company_id} AND s.quantity < 0 AND s.stock_type = 'sales' AND si.status != 'canceled' GROUP BY s.product_id, p.name ORDER BY total_sold_qty DESC LIMIT 10
 
+Q: "What are my top 10 products by value?"
+A: SELECT p.name AS product_name, SUM(ABS(s.quantity) * (sales_items.price - sales_items.discount)) AS total_sales_value FROM stock s JOIN products p ON s.product_id = p.product_id JOIN sales_invoice si ON si.invoice_id = s.invoice_id JOIN sales_items ON sales_items.invoice_id = si.invoice_id AND sales_items.product_id = s.product_id WHERE s.company_id = {company_id} AND s.quantity < 0 AND s.stock_type = 'sales' AND si.status != 'canceled' GROUP BY s.product_id, p.name ORDER BY total_sales_value DESC LIMIT 10
+
+Q: "What are my top 10 products by quantity?"
+A: SELECT p.name AS product_name, SUM(ABS(s.quantity)) AS total_sold_qty FROM stock s JOIN products p ON s.product_id = p.product_id JOIN sales_invoice si ON si.invoice_id = s.invoice_id WHERE s.company_id = {company_id} AND s.quantity < 0 AND s.stock_type = 'sales' AND si.status != 'canceled' GROUP BY s.product_id, p.name ORDER BY total_sold_qty DESC LIMIT 10
+
+Q: "Show me fast moving products"
+A: SELECT p.name AS product_name, SUM(ABS(s.quantity)) AS total_sold_qty FROM stock s JOIN products p ON s.product_id = p.product_id JOIN sales_invoice si ON si.invoice_id = s.invoice_id WHERE s.company_id = {company_id} AND s.quantity < 0 AND s.stock_type = 'sales' AND si.status != 'canceled' GROUP BY s.product_id, p.name ORDER BY total_sold_qty DESC LIMIT 10
 Now, analyze the user's question and generate the appropriate SQL query:
 
 {self.schema}
