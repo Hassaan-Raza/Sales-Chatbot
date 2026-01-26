@@ -255,20 +255,20 @@ CRITICAL BUSINESS RULES (Client-Specific):
 
         # Special handling for comparison queries - USE CLIENT'S EXACT PATTERNS
         user_question_lower = user_question.lower()
-        
+
         # Month comparison detection - expanded keywords
         is_month_comparison = (
-            ('compare' in user_question_lower or 'comparison' in user_question_lower or 'vs' in user_question_lower or 'versus' in user_question_lower) 
-            and 'month' in user_question_lower 
+            ('compare' in user_question_lower or 'comparison' in user_question_lower or 'vs' in user_question_lower or 'versus' in user_question_lower)
+            and 'month' in user_question_lower
             and 'year' not in user_question_lower
         )
-        
+
         # Year comparison detection
         is_year_comparison = (
-            ('compare' in user_question_lower or 'comparison' in user_question_lower or 'vs' in user_question_lower or 'versus' in user_question_lower) 
+            ('compare' in user_question_lower or 'comparison' in user_question_lower or 'vs' in user_question_lower or 'versus' in user_question_lower)
             and 'year' in user_question_lower
         )
-        
+
         if is_month_comparison:
             # Return client's EXACT month comparison query
             query = f"""SELECT 
@@ -288,13 +288,13 @@ CRITICAL BUSINESS RULES (Client-Specific):
     END), 0) AS total_sales_last_month
 FROM sales_invoice
 WHERE sales_invoice.company_id = {company_id}"""
-            
+
             print("="*80)
             print("USING HARDCODED MONTH COMPARISON QUERY:")
             print(query)
             print("="*80)
             return query
-            
+
         elif is_year_comparison:
             # Return client's EXACT year comparison query
             query = f"""SELECT 
@@ -314,7 +314,7 @@ WHERE sales_invoice.company_id = {company_id}"""
     END), 0) AS total_sales_last_year
 FROM sales_invoice
 WHERE sales_invoice.company_id = {company_id}"""
-            
+
             print("="*80)
             print("USING HARDCODED YEAR COMPARISON QUERY:")
             print(query)
@@ -326,20 +326,20 @@ WHERE sales_invoice.company_id = {company_id}"""
 
         # Special handling for comparison queries - USE CLIENT'S EXACT PATTERNS
         user_question_lower = user_question.lower()
-        
+
         # Month comparison detection - expanded keywords
         is_month_comparison = (
-            ('compare' in user_question_lower or 'comparison' in user_question_lower or 'vs' in user_question_lower or 'versus' in user_question_lower) 
-            and 'month' in user_question_lower 
+            ('compare' in user_question_lower or 'comparison' in user_question_lower or 'vs' in user_question_lower or 'versus' in user_question_lower)
+            and 'month' in user_question_lower
             and 'year' not in user_question_lower
         )
-        
+
         # Year comparison detection
         is_year_comparison = (
-            ('compare' in user_question_lower or 'comparison' in user_question_lower or 'vs' in user_question_lower or 'versus' in user_question_lower) 
+            ('compare' in user_question_lower or 'comparison' in user_question_lower or 'vs' in user_question_lower or 'versus' in user_question_lower)
             and 'year' in user_question_lower
         )
-        
+
         if is_month_comparison:
             # Return client's EXACT month comparison query
             query = f"""SELECT 
@@ -359,13 +359,13 @@ WHERE sales_invoice.company_id = {company_id}"""
     END), 0) AS total_sales_last_month
 FROM sales_invoice
 WHERE sales_invoice.company_id = {company_id}"""
-            
+
             print("="*80)
             print("USING HARDCODED MONTH COMPARISON QUERY:")
             print(query)
             print("="*80)
             return query
-            
+
         elif is_year_comparison:
             # Return client's EXACT year comparison query
             query = f"""SELECT 
@@ -385,7 +385,7 @@ WHERE sales_invoice.company_id = {company_id}"""
     END), 0) AS total_sales_last_year
 FROM sales_invoice
 WHERE sales_invoice.company_id = {company_id}"""
-            
+
             print("="*80)
             print("USING HARDCODED YEAR COMPARISON QUERY:")
             print(query)
@@ -623,7 +623,7 @@ Generate ONLY the SQL query following these exact patterns:"""
             print("="*80)
 
             sql_query = self._fix_common_sql_errors(sql_query)
-            
+
             # CRITICAL FIX: Ensure sales_items join includes product_id match
             if 'sales_items' in sql_query.lower() and 'stock' in sql_query.lower():
                 # Check if it's missing the product_id join condition
@@ -647,7 +647,7 @@ Generate ONLY the SQL query following these exact patterns:"""
                     print("FIXED SQL QUERY (added product_id join):")
                     print(sql_query)
                     print("="*80)
-            
+
             return sql_query
 
         except Exception as e:
@@ -656,7 +656,7 @@ Generate ONLY the SQL query following these exact patterns:"""
 
     def _generate_sql_with_llm(self, user_question, company_id, date_context):
         """Fallback LLM generation for queries not in hardcoded list"""
-        
+
         prompt = f"""Generate SQL for: "{user_question}"
 Company ID: {company_id}
 Date Filter: {date_context['filter']}
@@ -818,7 +818,7 @@ Generate ONLY the SQL query:"""
         if is_comparison:
             # Handle comparison formatting directly without complex LLM instructions
             result = results[0]
-            
+
             # Determine if it's month or year comparison
             if 'total_sales_this_month' in result:
                 this_period = float(result['total_sales_this_month'])
@@ -828,18 +828,18 @@ Generate ONLY the SQL query:"""
                 this_period = float(result['total_sales_this_year'])
                 last_period = float(result['total_sales_last_year'])
                 period_label = "Year"
-            
+
             # Calculate metrics
             difference = this_period - last_period
             if last_period > 0:
                 percent_change = (difference / last_period) * 100
             else:
                 percent_change = 0
-            
+
             # Format response
             trend_emoji = "📈" if difference > 0 else "📉" if difference < 0 else "➡️"
             sign = "+" if difference > 0 else ""
-            
+
             response = f"""**📊 SALES COMPARISON - This {period_label} vs Last {period_label}**
 
 **This {period_label}:** ${this_period:,.2f} 💰
@@ -849,7 +849,7 @@ Generate ONLY the SQL query:"""
 **Change:** {sign}{percent_change:.1f}% {trend_emoji}
 
 """
-            
+
             # Add insight
             if difference > 0:
                 response += f"💡 **Insight:** Sales increased by {percent_change:.1f}% - excellent performance! Maintain current strategies and consider scaling successful initiatives."
@@ -857,7 +857,7 @@ Generate ONLY the SQL query:"""
                 response += f"⚠️ **Insight:** Sales decreased by {abs(percent_change):.1f}% - review strategies and identify areas for improvement to recover growth."
             else:
                 response += "ℹ️ **Insight:** Sales remained stable - consider new growth initiatives to boost performance."
-            
+
             return response
         else:
             prompt = f"""You are a sales analytics assistant. Format this summary data into a clear, concise report.
