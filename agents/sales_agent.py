@@ -353,11 +353,16 @@ CRITICAL REQUIREMENTS - MUST FOLLOW CLIENT'S PATTERNS:
    ```
    Then use `SUM(ABS(s.quantity))` for total quantity sold
 
-8. **DATE FILTERING:** Use client's pattern with CURDATE() and DATE_FORMAT()
-9. Always include `WHERE [table].company_id = {company_id}`
-10. Use LEFT JOIN for optional relationships
-11. LIMIT 10 for list queries
-12. Return ONLY the SQL query - no explanations
+8. **COUNT QUERIES:** For counting records, use COUNT(primary_key), not SUM():
+   - Invoice count: `COUNT(invoice_id)` or `COUNT(si.invoice_id)`
+   - Customer count: `COUNT(DISTINCT customer_id)` or `COUNT(DISTINCT contact_id)`
+   - Product count: `COUNT(DISTINCT product_id)`
+
+9. **DATE FILTERING:** Use client's pattern with CURDATE() and DATE_FORMAT()
+10. Always include `WHERE [table].company_id = {company_id}`
+11. Use LEFT JOIN for optional relationships
+12. LIMIT 10 for list queries
+13. Return ONLY the SQL query - no explanations
 
 EXAMPLES (Client's Actual Patterns):
 
@@ -372,6 +377,9 @@ A: SELECT COALESCE(SUM(CASE WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDA
 
 Q: "Compare sales this year vs last year"
 A: SELECT COALESCE(SUM(CASE WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-01-01') AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled') THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0) ELSE 0 END), 0) AS total_sales_this_year, COALESCE(SUM(CASE WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE() - INTERVAL 1 YEAR, '%Y-01-01') AND sales_invoice.invoice_date < DATE_FORMAT(CURDATE(), '%Y-01-01') AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled') THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0) ELSE 0 END), 0) AS total_sales_last_year FROM sales_invoice WHERE sales_invoice.company_id = {company_id}
+
+Q: "What is the total number of sales invoices?" OR "How many invoices?" OR "Total invoices"
+A: SELECT COUNT(invoice_id) AS total_sales_invoices FROM sales_invoice WHERE company_id = {company_id} AND status NOT IN ('draft', 'draft_return', 'return', 'canceled')
 
 Q: "Who are my highest revenue customers?"
 A: SELECT c.company AS customer_name, SUM(si.total - COALESCE(si.total_tax, 0)) AS total_revenue FROM sales_invoice si JOIN contacts c ON c.contact_id = si.customer_id WHERE si.company_id = {company_id} AND si.status NOT IN ('draft', 'draft_return', 'return', 'canceled') GROUP BY si.customer_id, c.company ORDER BY total_revenue DESC LIMIT 10
