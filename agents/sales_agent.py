@@ -623,10 +623,59 @@ Generate ONLY the SQL query following these exact patterns:"""
             print("="*80)
 
             sql_query = self._fix_common_sql_errors(sql_query)
+            
+            # CRITICAL FIX: Ensure sales_items join includes product_id match
+            if 'sales_items' in sql_query.lower() and 'stock' in sql_query.lower():
+                # Check if it's missing the product_id join condition
+                if 'sales_items.product_id' not in sql_query and 'si_item.product_id' not in sql_query:
+                    print("⚠️ CRITICAL FIX: Adding missing product_id join to sales_items")
+                    # Fix the join - add product_id condition
+                    sql_query = re.sub(
+                        r'(JOIN sales_items(?: (?:AS )?si_item)? ON (?:si_item\.)?invoice_id = si\.invoice_id)',
+                        r'\1 AND si_item.product_id = s.product_id',
+                        sql_query,
+                        flags=re.IGNORECASE
+                    )
+                    # Also handle if using sales_items without alias
+                    sql_query = re.sub(
+                        r'(JOIN sales_items ON sales_items\.invoice_id = si\.invoice_id)(?! AND)',
+                        r'\1 AND sales_items.product_id = s.product_id',
+                        sql_query,
+                        flags=re.IGNORECASE
+                    )
+                    print("="*80)
+                    print("FIXED SQL QUERY (added product_id join):")
+                    print(sql_query)
+                    print("="*80)
+            
             return sql_query
 
         except Exception as e:
             print(f"Error generating SQL: {e}")
+            return None
+
+    def _generate_sql_with_llm(self, user_question, company_id, date_context):
+        """Fallback LLM generation for queries not in hardcoded list"""
+        
+        prompt = f"""Generate SQL for: "{user_question}"
+Company ID: {company_id}
+Date Filter: {date_context['filter']}
+
+Use client patterns:
+- Revenue: SUM(si.total - COALESCE(si.total_tax, 0))
+- Status: NOT IN ('draft', 'draft_return', 'return', 'canceled')
+- Customer: c.company (not c.name)
+- Category: pc.title (not pc.name)
+
+Generate ONLY the SQL query:"""
+
+        try:
+            sql_query = self._call_groq(prompt, max_tokens=600)
+            sql_query = re.sub(r'```sql\n?', '', sql_query)
+            sql_query = re.sub(r'```\n?', '', sql_query)
+            return sql_query.strip()
+        except Exception as e:
+            print(f"Error in LLM fallback: {e}")
             return None
 
     def _fix_common_sql_errors(self, sql_query):
