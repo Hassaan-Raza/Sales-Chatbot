@@ -393,9 +393,9 @@ WHERE sales_invoice.company_id = {company_id}"""
             return query
 
         # For non-comparison queries, use LLM generation with intelligent understanding
-        prompt = f"""You are an expert SQL query generator for a sales analytics system. Your job is to UNDERSTAND the user's intent and generate the correct SQL query.
+        prompt = """You are an expert SQL query generator for a sales analytics system. Your job is to UNDERSTAND the user's intent and generate the correct SQL query.
 
-{self.schema}
+""" + self.schema + f"""
 
 USER QUESTION: "{user_question}"
 
@@ -465,7 +465,7 @@ Count vs Sum:
 **STEP 3: GENERATE THE QUERY**
 
 Date Filtering:
-- Apply date filter from context: {date_context['filter']}
+- Apply date filter from context: """ + date_context['filter'] + """
 - Use DATE_FORMAT() and CURDATE() patterns as shown in schema
 
 Output Requirements:
