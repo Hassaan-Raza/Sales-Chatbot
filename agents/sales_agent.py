@@ -321,12 +321,189 @@ WHERE sales_invoice.company_id = {company_id}"""
             print("="*80)
             return query
 
-        # For non-comparison queries, use LLM generation
-        prompt = f"""You are a SQL expert for a sales analytics system. Generate a READ-ONLY SQL query based on the user's question.
+    def _generate_sql(self, user_question, company_id, date_context):
+        """Use LLM to generate SQL query from natural language"""
+
+        # Special handling for comparison queries - USE CLIENT'S EXACT PATTERNS
+        user_question_lower = user_question.lower()
+        
+        # Month comparison detection - expanded keywords
+        is_month_comparison = (
+            ('compare' in user_question_lower or 'comparison' in user_question_lower or 'vs' in user_question_lower or 'versus' in user_question_lower) 
+            and 'month' in user_question_lower 
+            and 'year' not in user_question_lower
+        )
+        
+        # Year comparison detection
+        is_year_comparison = (
+            ('compare' in user_question_lower or 'comparison' in user_question_lower or 'vs' in user_question_lower or 'versus' in user_question_lower) 
+            and 'year' in user_question_lower
+        )
+        
+        if is_month_comparison:
+            # Return client's EXACT month comparison query
+            query = f"""SELECT 
+    COALESCE(SUM(CASE 
+        WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
+         AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
+         AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+        THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
+        ELSE 0
+    END), 0) AS total_sales_this_month,
+    COALESCE(SUM(CASE 
+        WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE() - INTERVAL 1 MONTH, '%Y-%m-01')
+         AND sales_invoice.invoice_date < DATE_FORMAT(CURDATE(), '%Y-%m-01')
+         AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+        THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
+        ELSE 0
+    END), 0) AS total_sales_last_month
+FROM sales_invoice
+WHERE sales_invoice.company_id = {company_id}"""
+            
+            print("="*80)
+            print("USING HARDCODED MONTH COMPARISON QUERY:")
+            print(query)
+            print("="*80)
+            return query
+            
+        elif is_year_comparison:
+            # Return client's EXACT year comparison query
+            query = f"""SELECT 
+    COALESCE(SUM(CASE 
+        WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-01-01')
+         AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
+         AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+        THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
+        ELSE 0
+    END), 0) AS total_sales_this_year,
+    COALESCE(SUM(CASE 
+        WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE() - INTERVAL 1 YEAR, '%Y-01-01')
+         AND sales_invoice.invoice_date < DATE_FORMAT(CURDATE(), '%Y-01-01')
+         AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+        THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
+        ELSE 0
+    END), 0) AS total_sales_last_year
+FROM sales_invoice
+WHERE sales_invoice.company_id = {company_id}"""
+            
+            print("="*80)
+            print("USING HARDCODED YEAR COMPARISON QUERY:")
+            print(query)
+            print("="*80)
+            return query
+
+        # For non-comparison queries, use LLM generation with intelligent understanding
+        prompt = f"""You are an expert SQL query generator for a sales analytics system. Your job is to UNDERSTAND the user's intent and generate the correct SQL query.
 
 {self.schema}
 
-USER QUESTION: {user_question}
+USER QUESTION: "{user_question}"
+
+CONTEXT:
+- Company ID: {company_id}
+- Date Range: {date_context['label']}
+- Date Filter: {date_context['filter']}
+
+**STEP 1: UNDERSTAND THE INTENT**
+First, analyze what the user is asking for:
+- What entity? (sales, customers, products, categories, branches, salespeople, invoices)
+- What metric? (revenue, quantity, count, profit, margin)
+- What aggregation? (total/sum, average, count, maximum, minimum, list)
+- What ranking? (top/highest/best, bottom/lowest/worst, all items)
+- What time period? (today, this month, this year, trend, comparison)
+
+**STEP 2: APPLY BUSINESS RULES**
+
+Revenue Calculations:
+- ALWAYS use: `SUM(si.total - COALESCE(si.total_tax, 0))` for net sales/revenue
+- Status filter: `si.status NOT IN ('draft', 'draft_return', 'return', 'canceled')`
+
+Product Analytics Decision Tree:
+- If asking about QUANTITY/UNITS sold → Use stock table:
+  ```
+  FROM stock s
+  JOIN products p ON s.product_id = p.product_id
+  JOIN sales_invoice si ON si.invoice_id = s.invoice_id
+  WHERE s.company_id = {company_id}
+    AND s.quantity < 0
+    AND s.stock_type = 'sales'
+    AND si.status != 'canceled'
+  ```
+  Then: `SUM(ABS(s.quantity))` for quantity
+
+- If asking about REVENUE/VALUE → Join stock + sales_items:
+  ```
+  FROM stock s
+  JOIN products p ON s.product_id = p.product_id  
+  JOIN sales_invoice si ON si.invoice_id = s.invoice_id
+  JOIN sales_items si_item ON si_item.invoice_id = si.invoice_id AND si_item.product_id = s.product_id
+  WHERE s.company_id = {company_id}
+    AND s.stock_type = 'sales'
+    AND s.quantity < 0
+    AND si.status != 'canceled'
+  ```
+  Then: `SUM(ABS(s.quantity) * (si_item.price - si_item.discount))` for revenue
+
+- If asking about PROFIT → Same as revenue but:
+  `SUM(ABS(s.quantity) * ((si_item.price - si_item.discount) - s.cost))` for profit
+
+Field Name Mapping:
+- Customer name → `c.company` (NOT c.name!)
+- Warehouse/Branch name → `w.title`
+- Category name → `pc.title` (NOT pc.name!)
+- Salesperson → `CONCAT(u.firstname, ' ', u.lastname)` with filter `si.salesman > 0`
+
+Ranking Keywords:
+- "highest/top/best/maximum/most/peak" → `ORDER BY [metric] DESC LIMIT 1` (or LIMIT 10 for lists)
+- "lowest/bottom/worst/minimum/least/slowest" → `ORDER BY [metric] ASC LIMIT 1` (or LIMIT 10 for lists)
+- "show/list/display/all" → `ORDER BY [metric] DESC LIMIT 10`
+
+Count vs Sum:
+- "total number/count/how many" → Use `COUNT(invoice_id)` or `COUNT(DISTINCT ...)`
+- "total sales/revenue/amount" → Use `SUM(...)`
+
+**STEP 3: GENERATE THE QUERY**
+
+Date Filtering:
+- Apply date filter from context: {date_context['filter']}
+- Use DATE_FORMAT() and CURDATE() patterns as shown in schema
+
+Output Requirements:
+- Generate ONLY the SQL query
+- No explanations, no markdown formatting
+- No comments in the SQL
+- Use proper JOINs (LEFT JOIN for optional relationships)
+- Always filter by company_id = {company_id}
+- Use meaningful column aliases (total_sales, product_name, customer_name, etc.)
+
+**EXAMPLES FOR PATTERN LEARNING:**
+
+Example 1 - Understanding "category with least amount of sales":
+- Intent: Find category with MINIMUM sales
+- Entity: Categories (products_category)
+- Metric: Quantity sold (use stock table)
+- Ranking: Minimum (ORDER BY ASC LIMIT 1)
+- Query: SELECT pc.title AS category_name, SUM(ABS(s.quantity)) AS total_sold_qty FROM stock s JOIN products p ON p.product_id = s.product_id JOIN products_category pc ON pc.category_id = p.category_id JOIN sales_invoice si ON si.invoice_id = s.invoice_id WHERE s.company_id = {company_id} AND s.stock_type = 'sales' AND s.quantity < 0 AND si.status != 'canceled' GROUP BY pc.category_id, pc.title ORDER BY total_sold_qty ASC LIMIT 1
+
+Example 2 - Understanding "who spends the most":
+- Intent: Find customer with MAXIMUM revenue
+- Entity: Customers (contacts)
+- Metric: Revenue (use sales_invoice)
+- Ranking: Maximum (ORDER BY DESC)
+- Query: SELECT c.company AS customer_name, SUM(si.total - COALESCE(si.total_tax, 0)) AS total_revenue FROM sales_invoice si JOIN contacts c ON c.contact_id = si.customer_id WHERE si.company_id = {company_id} AND si.status NOT IN ('draft', 'draft_return', 'return', 'canceled') GROUP BY si.customer_id, c.company ORDER BY total_revenue DESC LIMIT 10
+
+Example 3 - Understanding "fast moving products":
+- Intent: Products with HIGH quantity sales
+- Entity: Products
+- Metric: Quantity (use stock table)
+- Ranking: Top performers (ORDER BY DESC)
+- Query: SELECT p.name AS product_name, SUM(ABS(s.quantity)) AS total_sold_qty FROM stock s JOIN products p ON s.product_id = p.product_id JOIN sales_invoice si ON si.invoice_id = s.invoice_id WHERE s.company_id = {company_id} AND s.quantity < 0 AND s.stock_type = 'sales' AND si.status != 'canceled' GROUP BY s.product_id, p.name ORDER BY total_sold_qty DESC LIMIT 10
+
+Now, analyze the user's question and generate the appropriate SQL query:"""
+
+{self.schema}
+
+USER QUESTION: "{user_question}"
 
 CONTEXT:
 - Company ID: {company_id}
@@ -377,6 +554,12 @@ A: SELECT COALESCE(SUM(CASE WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDA
 
 Q: "Compare sales this year vs last year"
 A: SELECT COALESCE(SUM(CASE WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-01-01') AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled') THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0) ELSE 0 END), 0) AS total_sales_this_year, COALESCE(SUM(CASE WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE() - INTERVAL 1 YEAR, '%Y-01-01') AND sales_invoice.invoice_date < DATE_FORMAT(CURDATE(), '%Y-01-01') AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled') THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0) ELSE 0 END), 0) AS total_sales_last_year FROM sales_invoice WHERE sales_invoice.company_id = {company_id}
+
+Q: "Which category has highest sales?" OR "Category with highest sales"
+A: SELECT pc.title AS category_name, SUM(ABS(s.quantity)) AS total_sold_qty FROM stock s JOIN products p ON p.product_id = s.product_id JOIN products_category pc ON pc.category_id = p.category_id JOIN sales_invoice si ON si.invoice_id = s.invoice_id WHERE s.company_id = {company_id} AND s.stock_type = 'sales' AND s.quantity < 0 AND si.status != 'canceled' GROUP BY pc.category_id, pc.title ORDER BY total_sold_qty DESC LIMIT 1
+
+Q: "Which category has lowest sales?" OR "Category with lowest sales"
+A: SELECT pc.title AS category_name, SUM(ABS(s.quantity)) AS total_sold_qty FROM stock s JOIN products p ON p.product_id = s.product_id JOIN products_category pc ON pc.category_id = p.category_id JOIN sales_invoice si ON si.invoice_id = s.invoice_id WHERE s.company_id = {company_id} AND s.stock_type = 'sales' AND s.quantity < 0 AND si.status != 'canceled' GROUP BY pc.category_id, pc.title ORDER BY total_sold_qty ASC LIMIT 1
 
 Q: "What is the total number of sales invoices?" OR "How many invoices?" OR "Total invoices"
 A: SELECT COUNT(invoice_id) AS total_sales_invoices FROM sales_invoice WHERE company_id = {company_id} AND status NOT IN ('draft', 'draft_return', 'return', 'canceled')
@@ -520,10 +703,10 @@ Generate ONLY the SQL query following these exact patterns:"""
 
                 # Format based on field type
                 if isinstance(value, (int, float)):
-                    if any(k in key.lower() for k in ['revenue', 'amount', 'total', 'sales', 'price', 'cost', 'profit', 'value']):
+                    if any(k in key.lower() for k in ['revenue', 'amount', 'total', 'sales', 'price', 'cost', 'profit', 'value']) and 'qty' not in key.lower() and 'quantity' not in key.lower():
                         response += f"  💰 **{formatted_key}:** ${value:,.2f}\n"
-                    elif any(k in key.lower() for k in ['count', 'quantity', 'invoices', 'orders', 'units', 'qty']):
-                        response += f"  📊 **{formatted_key}:** {int(value):,}\n"
+                    elif any(k in key.lower() for k in ['count', 'quantity', 'invoices', 'orders', 'units', 'qty', 'sold_qty']):
+                        response += f"  📦 **{formatted_key}:** {int(value):,} units\n"
                     elif 'percent' in key.lower() or 'margin' in key.lower():
                         response += f"  📈 **{formatted_key}:** {value:.2f}%\n"
                     elif 'days' in key.lower():
@@ -609,11 +792,22 @@ AVAILABLE FIELDS: {field_list}
 **REQUIREMENTS:**
 1. Start with a bold header with emoji
 2. Show ALL fields from results clearly
-3. Use emojis: 💰 money, 📊 stats, 🏆 winners, ⚠️ warnings, 📅 dates
-4. Format numbers: Currency $1,234.56, Quantities 1,234, Percentages 45.2%
-5. Keep it concise - this is a SUMMARY, not a detailed list
-6. Add 1 brief actionable insight
-7. Do NOT generate any SQL queries - only format the provided data
+3. Use emojis appropriately:
+   - 💰 for money/revenue/sales VALUE (dollars)
+   - 📦 for quantities/units (pieces sold)
+   - 📊 for counts (number of invoices, customers)
+   - 🏆 for winners/top performers
+   - ⚠️ for warnings
+   - 📅 for dates
+4. Format numbers correctly:
+   - Currency (revenue, total, sales, amount, price, cost, profit): $1,234.56
+   - Quantities (qty, quantity, units, sold): 1,234 units (NO dollar sign!)
+   - Counts (invoices, customers, orders): 1,234 (NO dollar sign!)
+   - Percentages: 45.2%
+5. CRITICAL: If field name contains 'qty' or 'quantity', it's UNITS not DOLLARS!
+6. Keep it concise - this is a SUMMARY, not a detailed list
+7. Add 1 brief actionable insight
+8. Do NOT generate any SQL queries - only format the provided data
 
 Generate the summary:"""
 
