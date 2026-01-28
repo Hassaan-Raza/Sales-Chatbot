@@ -258,729 +258,742 @@ CRITICAL BUSINESS RULES (Client-Specific):
         }
 
     def _generate_sql(self, user_question, company_id, date_context):
-        """Use LLM to generate SQL query from natural language"""
+            """Use LLM to generate SQL query from natural language"""
+            quick_map = {
+                'what are my returns for today': 'returns_today',
+                'how many returns today': 'returns_today',
+                'show me returns today': 'returns_today',
+                'what are my sales for today': 'sales_today',
+                'show me sales today': 'sales_today',
+                'today sales': 'sales_today',
+                # Add more as needed
+            }
 
-        user_question_lower = user_question.lower()
 
-        print(f"\n{'=' * 80}")
-        print(f"DEBUG: Processing: '{user_question}'")
-        print(f"Company ID: {company_id}")
-        print(f"Date Context: {date_context['label']}")
-        print(f"{'=' * 80}")
+            user_question_lower = user_question.lower()
+            for phrase, query_type in quick_map.items():
+                if phrase in user_question_lower:
+                    # Return the appropriate hardcoded query
+                    return self._get_simple_query(query_type, company_id)
+            print(f"\n{'=' * 80}")
+            print(f"DEBUG: Processing: '{user_question}'")
+            print(f"Company ID: {company_id}")
+            print(f"Date Context: {date_context['label']}")
+            print(f"{'=' * 80}")
 
-        # ============================================================================
-        # 1. CUSTOMER REVENUE & SALES ANALYTICS (Question 42-47)
-        # ============================================================================
+            # ============================================================================
+            # 1. CUSTOMER REVENUE & SALES ANALYTICS (Question 42-47)
+            # ============================================================================
 
-        # 1.1 Who are my highest revenue customers?
-        if any(phrase in user_question_lower for phrase in [
-            'highest revenue customers', 'top revenue customers', 'best customers',
-            'customers who spend the most', 'top 10 customers'
-        ]):
-            print("✓ Hardcoded: Highest revenue customers")
-            query = f"""SELECT
-        c.company AS customer_name,
-        SUM(si.total - COALESCE(si.total_tax, 0)) AS total_revenue
-    FROM sales_invoice si
-    JOIN contacts c ON c.contact_id = si.customer_id
-    WHERE si.company_id = {company_id}
-      AND si.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-    GROUP BY si.customer_id, c.company
-    ORDER BY total_revenue DESC
-    LIMIT 10;"""
-            return query
+            # 1.1 Who are my highest revenue customers?
+            if any(phrase in user_question_lower for phrase in [
+                'highest revenue customers', 'top revenue customers', 'best customers',
+                'customers who spend the most', 'top 10 customers'
+            ]):
+                print("✓ Hardcoded: Highest revenue customers")
+                query = f"""SELECT
+            c.company AS customer_name,
+            SUM(si.total - COALESCE(si.total_tax, 0)) AS total_revenue
+        FROM sales_invoice si
+        JOIN contacts c ON c.contact_id = si.customer_id
+        WHERE si.company_id = {company_id}
+          AND si.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+        GROUP BY si.customer_id, c.company
+        ORDER BY total_revenue DESC
+        LIMIT 10;"""
+                return query
 
-        # 1.2 Who are my lowest revenue customers?
-        if any(phrase in user_question_lower for phrase in [
-            'lowest revenue customers', 'worst customers', 'lowest spending customers'
-        ]):
-            print("✓ Hardcoded: Lowest revenue customers")
-            query = f"""SELECT
-        c.company AS customer_name,
-        SUM(si.total - COALESCE(si.total_tax, 0)) AS total_revenue
-    FROM sales_invoice si
-    JOIN contacts c ON c.contact_id = si.customer_id
-    WHERE si.company_id = {company_id}
-      AND si.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-    GROUP BY si.customer_id, c.company
-    ORDER BY total_revenue ASC
-    LIMIT 10;"""
-            return query
+            # 1.2 Who are my lowest revenue customers?
+            if any(phrase in user_question_lower for phrase in [
+                'lowest revenue customers', 'worst customers', 'lowest spending customers'
+            ]):
+                print("✓ Hardcoded: Lowest revenue customers")
+                query = f"""SELECT
+            c.company AS customer_name,
+            SUM(si.total - COALESCE(si.total_tax, 0)) AS total_revenue
+        FROM sales_invoice si
+        JOIN contacts c ON c.contact_id = si.customer_id
+        WHERE si.company_id = {company_id}
+          AND si.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+        GROUP BY si.customer_id, c.company
+        ORDER BY total_revenue ASC
+        LIMIT 10;"""
+                return query
 
-        # 1.3 Show customer-wise sales summary
-        if any(phrase in user_question_lower for phrase in [
-            'customer wise sales summary', 'customer sales summary',
-            'sales by customer', 'customer sales report'
-        ]):
-            print("✓ Hardcoded: Customer-wise sales summary")
-            query = f"""SELECT
-        c.company AS customer_name,
-        COUNT(si.invoice_id) AS total_invoices,
-        SUM(si.total) AS gross_sales,
-        SUM(COALESCE(si.total_tax, 0)) AS total_tax,
-        SUM(si.total - COALESCE(si.total_tax, 0)) AS net_sales
-    FROM sales_invoice si
-    JOIN contacts c ON c.contact_id = si.customer_id
-    WHERE si.company_id = {company_id}
-      AND si.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-    GROUP BY si.customer_id, c.company
-    ORDER BY net_sales DESC
-    LIMIT 50;"""
-            return query
+            # 1.3 Show customer-wise sales summary
+            if any(phrase in user_question_lower for phrase in [
+                'customer wise sales summary', 'customer sales summary',
+                'sales by customer', 'customer sales report'
+            ]):
+                print("✓ Hardcoded: Customer-wise sales summary")
+                query = f"""SELECT
+            c.company AS customer_name,
+            COUNT(si.invoice_id) AS total_invoices,
+            SUM(si.total) AS gross_sales,
+            SUM(COALESCE(si.total_tax, 0)) AS total_tax,
+            SUM(si.total - COALESCE(si.total_tax, 0)) AS net_sales
+        FROM sales_invoice si
+        JOIN contacts c ON c.contact_id = si.customer_id
+        WHERE si.company_id = {company_id}
+          AND si.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+        GROUP BY si.customer_id, c.company
+        ORDER BY net_sales DESC
+        LIMIT 50;"""
+                return query
 
-        # 1.4 Which customers have not purchased in last 30 days?
-        if '30 days' in user_question_lower and (
-                'not purchased' in user_question_lower or 'inactive' in user_question_lower):
-            print("✓ Hardcoded: Customers not purchased in 30 days")
-            query = f"""SELECT
-        c.company AS customer_name,
-        MAX(si_all.invoice_date) AS last_invoice_date
-    FROM contacts c
-    LEFT JOIN sales_invoice si_recent
-        ON si_recent.customer_id = c.contact_id
-        AND si_recent.company_id = {company_id}
-        AND si_recent.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-        AND si_recent.invoice_date >= CURDATE() - INTERVAL 30 DAY
-    LEFT JOIN sales_invoice si_all
-        ON si_all.customer_id = c.contact_id
-        AND si_all.company_id = {company_id}
-        AND si_all.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-    WHERE si_recent.invoice_id IS NULL
-    GROUP BY c.company
-    ORDER BY last_invoice_date DESC
-    LIMIT 10;"""
-            return query
+            # 1.4 Which customers have not purchased in last 30 days?
+            if '30 days' in user_question_lower and (
+                    'not purchased' in user_question_lower or 'inactive' in user_question_lower):
+                print("✓ Hardcoded: Customers not purchased in 30 days")
+                query = f"""SELECT
+            c.company AS customer_name,
+            MAX(si_all.invoice_date) AS last_invoice_date
+        FROM contacts c
+        LEFT JOIN sales_invoice si_recent
+            ON si_recent.customer_id = c.contact_id
+            AND si_recent.company_id = {company_id}
+            AND si_recent.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+            AND si_recent.invoice_date >= CURDATE() - INTERVAL 30 DAY
+        LEFT JOIN sales_invoice si_all
+            ON si_all.customer_id = c.contact_id
+            AND si_all.company_id = {company_id}
+            AND si_all.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+        WHERE si_recent.invoice_id IS NULL
+        GROUP BY c.company
+        ORDER BY last_invoice_date DESC
+        LIMIT 10;"""
+                return query
 
-        # 1.5 Which customers have not purchased in last 60 days?
-        if '60 days' in user_question_lower and (
-                'not purchased' in user_question_lower or 'inactive' in user_question_lower):
-            print("✓ Hardcoded: Customers not purchased in 60 days")
-            query = f"""SELECT
-        c.company AS customer_name,
-        MAX(si_all.invoice_date) AS last_invoice_date
-    FROM contacts c
-    LEFT JOIN sales_invoice si_recent
-        ON si_recent.customer_id = c.contact_id
-        AND si_recent.company_id = {company_id}
-        AND si_recent.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-        AND si_recent.invoice_date >= CURDATE() - INTERVAL 60 DAY
-    LEFT JOIN sales_invoice si_all
-        ON si_all.customer_id = c.contact_id
-        AND si_all.company_id = {company_id}
-        AND si_all.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-    WHERE si_recent.invoice_id IS NULL
-    GROUP BY c.company
-    ORDER BY last_invoice_date DESC
-    LIMIT 10;"""
-            return query
+            # 1.5 Which customers have not purchased in last 60 days?
+            if '60 days' in user_question_lower and (
+                    'not purchased' in user_question_lower or 'inactive' in user_question_lower):
+                print("✓ Hardcoded: Customers not purchased in 60 days")
+                query = f"""SELECT
+            c.company AS customer_name,
+            MAX(si_all.invoice_date) AS last_invoice_date
+        FROM contacts c
+        LEFT JOIN sales_invoice si_recent
+            ON si_recent.customer_id = c.contact_id
+            AND si_recent.company_id = {company_id}
+            AND si_recent.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+            AND si_recent.invoice_date >= CURDATE() - INTERVAL 60 DAY
+        LEFT JOIN sales_invoice si_all
+            ON si_all.customer_id = c.contact_id
+            AND si_all.company_id = {company_id}
+            AND si_all.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+        WHERE si_recent.invoice_id IS NULL
+        GROUP BY c.company
+        ORDER BY last_invoice_date DESC
+        LIMIT 10;"""
+                return query
 
-        # 1.6 Which customers have not purchased in last 90 days?
-        if '90 days' in user_question_lower and (
-                'not purchased' in user_question_lower or 'inactive' in user_question_lower):
-            print("✓ Hardcoded: Customers not purchased in 90 days")
-            query = f"""SELECT
-        c.company AS customer_name,
-        MAX(si_all.invoice_date) AS last_invoice_date
-    FROM contacts c
-    LEFT JOIN sales_invoice si_recent
-        ON si_recent.customer_id = c.contact_id
-        AND si_recent.company_id = {company_id}
-        AND si_recent.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-        AND si_recent.invoice_date >= CURDATE() - INTERVAL 90 DAY
-    LEFT JOIN sales_invoice si_all
-        ON si_all.customer_id = c.contact_id
-        AND si_all.company_id = {company_id}
-        AND si_all.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-    WHERE si_recent.invoice_id IS NULL
-    GROUP BY c.company
-    ORDER BY last_invoice_date DESC
-    LIMIT 10;"""
-            return query
+            # 1.6 Which customers have not purchased in last 90 days?
+            if '90 days' in user_question_lower and (
+                    'not purchased' in user_question_lower or 'inactive' in user_question_lower):
+                print("✓ Hardcoded: Customers not purchased in 90 days")
+                query = f"""SELECT
+            c.company AS customer_name,
+            MAX(si_all.invoice_date) AS last_invoice_date
+        FROM contacts c
+        LEFT JOIN sales_invoice si_recent
+            ON si_recent.customer_id = c.contact_id
+            AND si_recent.company_id = {company_id}
+            AND si_recent.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+            AND si_recent.invoice_date >= CURDATE() - INTERVAL 90 DAY
+        LEFT JOIN sales_invoice si_all
+            ON si_all.customer_id = c.contact_id
+            AND si_all.company_id = {company_id}
+            AND si_all.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+        WHERE si_recent.invoice_id IS NULL
+        GROUP BY c.company
+        ORDER BY last_invoice_date DESC
+        LIMIT 10;"""
+                return query
 
-        # ============================================================================
-        # 2. DAILY/MONTHLY/YEARLY SALES QUERIES (Question 1-15)
-        # ============================================================================
+            # ============================================================================
+            # 2. DAILY/MONTHLY/YEARLY SALES QUERIES (Question 1-15)
+            # ============================================================================
 
-        # 2.1 Total sales today
-        if any(phrase in user_question_lower for phrase in [
-            'total sales today', 'sales today', 'today sales',
-            'sales for today', 'what are my sales today'
-        ]):
-            print("✓ Hardcoded: Total sales today")
-            query = f"""SELECT
-        SUM(sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)) AS total_sales
-    FROM sales_invoice
-    WHERE sales_invoice.company_id = {company_id}
-      AND sales_invoice.invoice_date >= CURDATE()
-      AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
-      AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled');"""
-            return query
+            # 2.1 Total sales today
+            if any(phrase in user_question_lower for phrase in [
+                'total sales today', 'sales today', 'today sales',
+                'sales for today', 'what are my sales today'
+            ]):
+                print("✓ Hardcoded: Total sales today")
+                query = f"""SELECT
+            SUM(sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)) AS total_sales
+        FROM sales_invoice
+        WHERE sales_invoice.company_id = {company_id}
+          AND sales_invoice.invoice_date >= CURDATE()
+          AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
+          AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled');"""
+                return query
 
-        # 2.2 Total sales this month
-        if any(phrase in user_question_lower for phrase in ['total sales this month', 'sales this month']):
-            print("✓ Hardcoded: Total sales this month")
-            query = f"""SELECT
-        SUM(sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)) AS total_sales
-    FROM sales_invoice
-    WHERE sales_invoice.company_id = {company_id}
-      AND sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
-      AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
-      AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled');"""
-            return query
+            # 2.2 Total sales this month
+            if any(phrase in user_question_lower for phrase in ['total sales this month', 'sales this month']):
+                print("✓ Hardcoded: Total sales this month")
+                query = f"""SELECT
+            SUM(sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)) AS total_sales
+        FROM sales_invoice
+        WHERE sales_invoice.company_id = {company_id}
+          AND sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
+          AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
+          AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled');"""
+                return query
 
-        # 2.3 Total sales this year
-        if any(phrase in user_question_lower for phrase in ['total sales this year', 'sales this year']):
-            print("✓ Hardcoded: Total sales this year")
-            query = f"""SELECT
-        SUM(sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)) AS total_sales
-    FROM sales_invoice
-    WHERE sales_invoice.company_id = {company_id}
-      AND sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-01-01')
-      AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
-      AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled');"""
-            return query
+            # 2.3 Total sales this year
+            if any(phrase in user_question_lower for phrase in ['total sales this year', 'sales this year']):
+                print("✓ Hardcoded: Total sales this year")
+                query = f"""SELECT
+            SUM(sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)) AS total_sales
+        FROM sales_invoice
+        WHERE sales_invoice.company_id = {company_id}
+          AND sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-01-01')
+          AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
+          AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled');"""
+                return query
 
-        # 2.4 Total returns today
-        if any(phrase in user_question_lower for phrase in ['total returns today', 'returns today']):
-            print("✓ Hardcoded: Total returns today")
-            query = f"""SELECT
-        SUM(sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)) AS total_returns
-    FROM sales_invoice
-    WHERE sales_invoice.company_id = {company_id}
-      AND sales_invoice.invoice_date >= CURDATE()
-      AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
-      AND sales_invoice.status = 'return';"""
-            return query
+            # 2.4 Total returns today
+            if any(phrase in user_question_lower for phrase in ['total returns today', 'returns today']):
+                print("✓ Hardcoded: Total returns today")
+                query = f"""SELECT
+            SUM(sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)) AS total_returns
+        FROM sales_invoice
+        WHERE sales_invoice.company_id = {company_id}
+          AND sales_invoice.invoice_date >= CURDATE()
+          AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
+          AND sales_invoice.status = 'return';"""
+                return query
 
-        # 2.5 Total returns this month
-        if any(phrase in user_question_lower for phrase in [
-            'total returns today', 'returns today', 'today returns',
-            'returns for today', 'what are my returns today'
-        ]):
-            print("✓ Hardcoded: Total returns this month")
-            query = f"""SELECT
-        SUM(sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)) AS total_returns
-    FROM sales_invoice
-    WHERE sales_invoice.company_id = {company_id}
-      AND sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
-      AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
-      AND sales_invoice.status = 'return';"""
-            return query
+            # 2.5 Total returns this month
+            if any(phrase in user_question_lower for phrase in [
+                'total returns today', 'returns today', 'today returns',
+                'returns for today', 'what are my returns today'
+            ]):
+                print("✓ Hardcoded: Total returns this month")
+                query = f"""SELECT
+            SUM(sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)) AS total_returns
+        FROM sales_invoice
+        WHERE sales_invoice.company_id = {company_id}
+          AND sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
+          AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
+          AND sales_invoice.status = 'return';"""
+                return query
 
-        # 2.6 Total returns this year
-        if any(phrase in user_question_lower for phrase in ['total returns this year', 'returns this year']):
-            print("✓ Hardcoded: Total returns this year")
-            query = f"""SELECT
-        SUM(sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)) AS total_returns
-    FROM sales_invoice
-    WHERE sales_invoice.company_id = {company_id}
-      AND sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-01-01')
-      AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
-      AND sales_invoice.status = 'return';"""
-            return query
+            # 2.6 Total returns this year
+            if any(phrase in user_question_lower for phrase in ['total returns this year', 'returns this year']):
+                print("✓ Hardcoded: Total returns this year")
+                query = f"""SELECT
+            SUM(sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)) AS total_returns
+        FROM sales_invoice
+        WHERE sales_invoice.company_id = {company_id}
+          AND sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-01-01')
+          AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
+          AND sales_invoice.status = 'return';"""
+                return query
 
-        # 2.7 Net sales today
-        if any(phrase in user_question_lower for phrase in ['net sales today']):
-            print("✓ Hardcoded: Net sales today")
-            query = f"""SELECT
-        COALESCE(
-            SUM(
-                CASE
-                    WHEN sales_invoice.status = 'return' THEN -(
-                        sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
-                    )
-                    ELSE (
-                        sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
-                    )
-                END
-            ),
-            0
-        ) AS net_sales
-    FROM sales_invoice
-    WHERE sales_invoice.company_id = {company_id}
-      AND sales_invoice.invoice_date >= CURDATE()
-      AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
-      AND sales_invoice.status NOT IN('draft', 'draft_return', 'canceled');"""
-            return query
+            # 2.7 Net sales today
+            if any(phrase in user_question_lower for phrase in ['net sales today']):
+                print("✓ Hardcoded: Net sales today")
+                query = f"""SELECT
+            COALESCE(
+                SUM(
+                    CASE
+                        WHEN sales_invoice.status = 'return' THEN -(
+                            sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
+                        )
+                        ELSE (
+                            sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
+                        )
+                    END
+                ),
+                0
+            ) AS net_sales
+        FROM sales_invoice
+        WHERE sales_invoice.company_id = {company_id}
+          AND sales_invoice.invoice_date >= CURDATE()
+          AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
+          AND sales_invoice.status NOT IN('draft', 'draft_return', 'canceled');"""
+                return query
 
-        # 2.8 Net sales this month
-        if any(phrase in user_question_lower for phrase in ['net sales this month']):
-            print("✓ Hardcoded: Net sales this month")
-            query = f"""SELECT
-        COALESCE(
-            SUM(
-                CASE
-                    WHEN sales_invoice.status = 'return' THEN -(
-                        sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
-                    )
-                    ELSE (
-                        sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
-                    )
-                END
-            ),
-            0
-        ) AS net_sales
-    FROM sales_invoice
-    WHERE sales_invoice.company_id = {company_id}
-      AND sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
-      AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
-      AND sales_invoice.status NOT IN('draft', 'draft_return', 'canceled');"""
-            return query
+            # 2.8 Net sales this month
+            if any(phrase in user_question_lower for phrase in ['net sales this month']):
+                print("✓ Hardcoded: Net sales this month")
+                query = f"""SELECT
+            COALESCE(
+                SUM(
+                    CASE
+                        WHEN sales_invoice.status = 'return' THEN -(
+                            sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
+                        )
+                        ELSE (
+                            sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
+                        )
+                    END
+                ),
+                0
+            ) AS net_sales
+        FROM sales_invoice
+        WHERE sales_invoice.company_id = {company_id}
+          AND sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
+          AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
+          AND sales_invoice.status NOT IN('draft', 'draft_return', 'canceled');"""
+                return query
 
-        # 2.9 Net sales this year
-        if any(phrase in user_question_lower for phrase in ['net sales this year']):
-            print("✓ Hardcoded: Net sales this year")
-            query = f"""SELECT
-        COALESCE(
-            SUM(
-                CASE
-                    WHEN sales_invoice.status = 'return' THEN -(
-                        sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
-                    )
-                    ELSE (
-                        sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
-                    )
-                END
-            ),
-            0
-        ) AS net_sales
-    FROM sales_invoice
-    WHERE sales_invoice.company_id = {company_id}
-      AND sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-01-01')
-      AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
-      AND sales_invoice.status NOT IN ('draft', 'draft_return', 'canceled');"""
-            return query
+            # 2.9 Net sales this year
+            if any(phrase in user_question_lower for phrase in ['net sales this year']):
+                print("✓ Hardcoded: Net sales this year")
+                query = f"""SELECT
+            COALESCE(
+                SUM(
+                    CASE
+                        WHEN sales_invoice.status = 'return' THEN -(
+                            sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
+                        )
+                        ELSE (
+                            sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
+                        )
+                    END
+                ),
+                0
+            ) AS net_sales
+        FROM sales_invoice
+        WHERE sales_invoice.company_id = {company_id}
+          AND sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-01-01')
+          AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
+          AND sales_invoice.status NOT IN ('draft', 'draft_return', 'canceled');"""
+                return query
 
-        # ============================================================================
-        # 3. COMPARISON QUERIES
-        # ============================================================================
+            # ============================================================================
+            # 3. COMPARISON QUERIES
+            # ============================================================================
 
-        # 3.1 Compare this month vs last month
-        if any(phrase in user_question_lower for phrase in [
-            'compare this month vs last month', 'compare this month with last month',
-            'month vs month', 'month comparison'
-        ]):
-            print("✓ Hardcoded: Compare this month vs last month")
-            query = f"""SELECT
-        COALESCE(SUM(CASE
-            WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
-             AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
-             AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-            THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
-            ELSE 0
-        END), 0) AS total_sales_this_month,
-        COALESCE(SUM(CASE
-            WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE() - INTERVAL 1 MONTH, '%Y-%m-01')
-             AND sales_invoice.invoice_date < DATE_FORMAT(CURDATE(), '%Y-%m-01')
-             AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-            THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
-            ELSE 0
-        END), 0) AS total_sales_last_month
-    FROM sales_invoice
-    WHERE sales_invoice.company_id = {company_id};"""
-            return query
+            # 3.1 Compare this month vs last month
+            if any(phrase in user_question_lower for phrase in [
+                'compare this month vs last month', 'compare this month with last month',
+                'month vs month', 'month comparison'
+            ]):
+                print("✓ Hardcoded: Compare this month vs last month")
+                query = f"""SELECT
+            COALESCE(SUM(CASE
+                WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
+                 AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
+                 AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+                THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
+                ELSE 0
+            END), 0) AS total_sales_this_month,
+            COALESCE(SUM(CASE
+                WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE() - INTERVAL 1 MONTH, '%Y-%m-01')
+                 AND sales_invoice.invoice_date < DATE_FORMAT(CURDATE(), '%Y-%m-01')
+                 AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+                THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
+                ELSE 0
+            END), 0) AS total_sales_last_month
+        FROM sales_invoice
+        WHERE sales_invoice.company_id = {company_id};"""
+                return query
 
-        # 3.2 Compare this year vs last year
-        if any(phrase in user_question_lower for phrase in [
-            'compare this year vs last year', 'compare this year with last year',
-            'year vs year', 'year comparison'
-        ]):
-            print("✓ Hardcoded: Compare this year vs last year")
-            query = f"""SELECT
-        COALESCE(SUM(CASE
-            WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-01-01')
-             AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
-             AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-            THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
-            ELSE 0
-        END), 0) AS total_sales_this_year,
-        COALESCE(SUM(CASE
-            WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE() - INTERVAL 1 YEAR, '%Y-01-01')
-             AND sales_invoice.invoice_date < DATE_FORMAT(CURDATE(), '%Y-01-01')
-             AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-            THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
-            ELSE 0
-        END), 0) AS total_sales_last_year
-    FROM sales_invoice
-    WHERE sales_invoice.company_id = {company_id};"""
-            return query
+            # 3.2 Compare this year vs last year
+            if any(phrase in user_question_lower for phrase in [
+                'compare this year vs last year', 'compare this year with last year',
+                'year vs year', 'year comparison'
+            ]):
+                print("✓ Hardcoded: Compare this year vs last year")
+                query = f"""SELECT
+            COALESCE(SUM(CASE
+                WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE(), '%Y-01-01')
+                 AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
+                 AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+                THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
+                ELSE 0
+            END), 0) AS total_sales_this_year,
+            COALESCE(SUM(CASE
+                WHEN sales_invoice.invoice_date >= DATE_FORMAT(CURDATE() - INTERVAL 1 YEAR, '%Y-01-01')
+                 AND sales_invoice.invoice_date < DATE_FORMAT(CURDATE(), '%Y-01-01')
+                 AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+                THEN sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)
+                ELSE 0
+            END), 0) AS total_sales_last_year
+        FROM sales_invoice
+        WHERE sales_invoice.company_id = {company_id};"""
+                return query
 
-        # ============================================================================
-        # 4. DAILY SALES EXTREMES & SUMMARY (Daily Sales Extremes section)
-        # ============================================================================
+            # ============================================================================
+            # 4. DAILY SALES EXTREMES & SUMMARY (Daily Sales Extremes section)
+            # ============================================================================
 
-        # 4.1 Day with highest sales
-        if any(phrase in user_question_lower for phrase in [
-            'day with highest sales', 'highest sales day', 'best sales day'
-        ]):
-            print("✓ Hardcoded: Day with highest sales")
-            query = f"""SELECT
-        DATE(invoice_date) AS sales_day,
-        SUM(total - COALESCE(total_tax, 0)) AS total_sales
-    FROM sales_invoice
-    WHERE company_id = {company_id}
-      AND status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-    GROUP BY DATE(invoice_date)
-    ORDER BY total_sales DESC
-    LIMIT 1;"""
-            return query
+            # 4.1 Day with highest sales
+            if any(phrase in user_question_lower for phrase in [
+                'day with highest sales', 'highest sales day', 'best sales day'
+            ]):
+                print("✓ Hardcoded: Day with highest sales")
+                query = f"""SELECT
+            DATE(invoice_date) AS sales_day,
+            SUM(total - COALESCE(total_tax, 0)) AS total_sales
+        FROM sales_invoice
+        WHERE company_id = {company_id}
+          AND status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+        GROUP BY DATE(invoice_date)
+        ORDER BY total_sales DESC
+        LIMIT 1;"""
+                return query
 
-        # 4.2 Day with lowest sales
-        if any(phrase in user_question_lower for phrase in [
-            'day with lowest sales', 'lowest sales day', 'worst sales day'
-        ]):
-            print("✓ Hardcoded: Day with lowest sales")
-            query = f"""SELECT
-        DATE(invoice_date) AS sales_day,
-        SUM(total - COALESCE(total_tax, 0)) AS total_sales
-    FROM sales_invoice
-    WHERE company_id = {company_id}
-      AND status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-    GROUP BY DATE(invoice_date)
-    ORDER BY total_sales ASC
-    LIMIT 1;"""
-            return query
+            # 4.2 Day with lowest sales
+            if any(phrase in user_question_lower for phrase in [
+                'day with lowest sales', 'lowest sales day', 'worst sales day'
+            ]):
+                print("✓ Hardcoded: Day with lowest sales")
+                query = f"""SELECT
+            DATE(invoice_date) AS sales_day,
+            SUM(total - COALESCE(total_tax, 0)) AS total_sales
+        FROM sales_invoice
+        WHERE company_id = {company_id}
+          AND status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+        GROUP BY DATE(invoice_date)
+        ORDER BY total_sales ASC
+        LIMIT 1;"""
+                return query
 
-        # 4.3 Total number of sales invoices
-        if any(phrase in user_question_lower for phrase in [
-            'total number of sales invoices', 'how many invoices', 'total invoices',
-            'count of invoices'
-        ]):
-            print("✓ Hardcoded: Total number of sales invoices")
-            query = f"""SELECT
-        COUNT(invoice_id) AS total_sales_invoices
-    FROM sales_invoice
-    WHERE company_id = {company_id}
-      AND status NOT IN ('draft', 'draft_return', 'return', 'canceled');"""
-            return query
+            # 4.3 Total number of sales invoices
+            if any(phrase in user_question_lower for phrase in [
+                'total number of sales invoices', 'how many invoices', 'total invoices',
+                'count of invoices'
+            ]):
+                print("✓ Hardcoded: Total number of sales invoices")
+                query = f"""SELECT
+            COUNT(invoice_id) AS total_sales_invoices
+        FROM sales_invoice
+        WHERE company_id = {company_id}
+          AND status NOT IN ('draft', 'draft_return', 'return', 'canceled');"""
+                return query
 
-        # ============================================================================
-        # 5. SALES TREND QUERIES
-        # ============================================================================
+            # ============================================================================
+            # 5. SALES TREND QUERIES
+            # ============================================================================
 
-        # 5.1 Sales trend last 12 months
-        if any(phrase in user_question_lower for phrase in [
-            'sales trend last 12 months', 'sales trend', 'monthly sales trend',
-            'last 12 months trend'
-        ]):
-            print("✓ Hardcoded: Sales trend last 12 months")
-            query = f"""SELECT
-        DATE_FORMAT(invoice_date, '%Y-%m') AS month,
-        SUM(total - COALESCE(total_tax, 0)) AS total_sales
-    FROM sales_invoice
-    WHERE company_id = {company_id}
-      AND invoice_date >= DATE_FORMAT(CURDATE() - INTERVAL 11 MONTH, '%Y-%m-01')
-      AND status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-    GROUP BY DATE_FORMAT(invoice_date, '%Y-%m')
-    ORDER BY month ASC;"""
-            return query
+            # 5.1 Sales trend last 12 months
+            if any(phrase in user_question_lower for phrase in [
+                'sales trend last 12 months', 'sales trend', 'monthly sales trend',
+                'last 12 months trend'
+            ]):
+                print("✓ Hardcoded: Sales trend last 12 months")
+                query = f"""SELECT
+            DATE_FORMAT(invoice_date, '%Y-%m') AS month,
+            SUM(total - COALESCE(total_tax, 0)) AS total_sales
+        FROM sales_invoice
+        WHERE company_id = {company_id}
+          AND invoice_date >= DATE_FORMAT(CURDATE() - INTERVAL 11 MONTH, '%Y-%m-01')
+          AND status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+        GROUP BY DATE_FORMAT(invoice_date, '%Y-%m')
+        ORDER BY month ASC;"""
+                return query
 
-        # ============================================================================
-        # 6. BRANCH/WAREHOUSE SALES EXTREMES
-        # ============================================================================
+            # ============================================================================
+            # 6. BRANCH/WAREHOUSE SALES EXTREMES
+            # ============================================================================
 
-        # 6.1 Branch with highest sales
-        if any(phrase in user_question_lower for phrase in [
-            'branch with highest sales', 'warehouse with highest sales',
-            'highest sales branch', 'top performing branch'
-        ]):
-            print("✓ Hardcoded: Branch with highest sales")
-            query = f"""SELECT
-        w.title AS branch_name,
-        SUM(si.total - COALESCE(si.total_tax, 0)) AS total_sales
-    FROM sales_invoice si
-    JOIN warehouses w ON si.warehouse_id = w.warehouse_id
-    WHERE si.company_id = {company_id}
-      AND si.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-    GROUP BY si.warehouse_id, w.title
-    ORDER BY total_sales DESC
-    LIMIT 1;"""
-            return query
+            # 6.1 Branch with highest sales
+            if any(phrase in user_question_lower for phrase in [
+                'branch with highest sales', 'warehouse with highest sales',
+                'highest sales branch', 'top performing branch'
+            ]):
+                print("✓ Hardcoded: Branch with highest sales")
+                query = f"""SELECT
+            w.title AS branch_name,
+            SUM(si.total - COALESCE(si.total_tax, 0)) AS total_sales
+        FROM sales_invoice si
+        JOIN warehouses w ON si.warehouse_id = w.warehouse_id
+        WHERE si.company_id = {company_id}
+          AND si.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+        GROUP BY si.warehouse_id, w.title
+        ORDER BY total_sales DESC
+        LIMIT 1;"""
+                return query
 
-        # 6.2 Branch with lowest sales
-        if any(phrase in user_question_lower for phrase in [
-            'branch with lowest sales', 'warehouse with lowest sales',
-            'lowest sales branch', 'worst performing branch'
-        ]):
-            print("✓ Hardcoded: Branch with lowest sales")
-            query = f"""SELECT
-        w.title AS branch_name,
-        SUM(si.total - COALESCE(si.total_tax, 0)) AS total_sales
-    FROM sales_invoice si
-    JOIN warehouses w ON si.warehouse_id = w.warehouse_id
-    WHERE si.company_id = {company_id}
-      AND si.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-    GROUP BY si.warehouse_id, w.title
-    ORDER BY total_sales ASC
-    LIMIT 1;"""
-            return query
+            # 6.2 Branch with lowest sales
+            if any(phrase in user_question_lower for phrase in [
+                'branch with lowest sales', 'warehouse with lowest sales',
+                'lowest sales branch', 'worst performing branch'
+            ]):
+                print("✓ Hardcoded: Branch with lowest sales")
+                query = f"""SELECT
+            w.title AS branch_name,
+            SUM(si.total - COALESCE(si.total_tax, 0)) AS total_sales
+        FROM sales_invoice si
+        JOIN warehouses w ON si.warehouse_id = w.warehouse_id
+        WHERE si.company_id = {company_id}
+          AND si.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+        GROUP BY si.warehouse_id, w.title
+        ORDER BY total_sales ASC
+        LIMIT 1;"""
+                return query
 
-        # ============================================================================
-        # 7. SALESPERSON ANALYTICS (Question 17-19)
-        # ============================================================================
+            # ============================================================================
+            # 7. SALESPERSON ANALYTICS (Question 17-19)
+            # ============================================================================
 
-        # 7.1 Sales by salesperson
-        if any(phrase in user_question_lower for phrase in [
-            'sales by salesperson', 'salesperson sales', 'sales by rep',
-            'show sales by salesperson'
-        ]):
-            print("✓ Hardcoded: Sales by salesperson")
-            query = f"""SELECT
-        CONCAT(u.firstname, ' ', u.lastname) AS salesperson_name,
-        SUM(si.total - COALESCE(si.total_tax, 0)) AS total_sales
-    FROM sales_invoice si
-    LEFT JOIN users u ON si.salesman = u.user_id
-    WHERE si.company_id = {company_id}
-      AND si.salesman > 0
-      AND si.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-    GROUP BY si.salesman, u.firstname, u.lastname
-    ORDER BY total_sales DESC;"""
-            return query
+            # 7.1 Sales by salesperson
+            if any(phrase in user_question_lower for phrase in [
+                'sales by salesperson', 'salesperson sales', 'sales by rep',
+                'show sales by salesperson'
+            ]):
+                print("✓ Hardcoded: Sales by salesperson")
+                query = f"""SELECT
+            CONCAT(u.firstname, ' ', u.lastname) AS salesperson_name,
+            SUM(si.total - COALESCE(si.total_tax, 0)) AS total_sales
+        FROM sales_invoice si
+        LEFT JOIN users u ON si.salesman = u.user_id
+        WHERE si.company_id = {company_id}
+          AND si.salesman > 0
+          AND si.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+        GROUP BY si.salesman, u.firstname, u.lastname
+        ORDER BY total_sales DESC;"""
+                return query
 
-        # 7.2 Salesperson with highest sales
-        if any(phrase in user_question_lower for phrase in [
-            'salesperson with highest sales', 'top salesperson',
-            'best performing salesperson'
-        ]):
-            print("✓ Hardcoded: Salesperson with highest sales")
-            query = f"""SELECT
-        CONCAT(u.firstname, ' ', u.lastname) AS salesperson_name,
-        SUM(si.total - COALESCE(si.total_tax, 0)) AS total_sales
-    FROM sales_invoice si
-    LEFT JOIN users u ON si.salesman = u.user_id
-    WHERE si.company_id = {company_id}
-      AND si.salesman > 0
-      AND si.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-    GROUP BY si.salesman, u.firstname, u.lastname
-    ORDER BY total_sales DESC
-    LIMIT 1;"""
-            return query
+            # 7.2 Salesperson with highest sales
+            if any(phrase in user_question_lower for phrase in [
+                'salesperson with highest sales', 'top salesperson',
+                'best performing salesperson'
+            ]):
+                print("✓ Hardcoded: Salesperson with highest sales")
+                query = f"""SELECT
+            CONCAT(u.firstname, ' ', u.lastname) AS salesperson_name,
+            SUM(si.total - COALESCE(si.total_tax, 0)) AS total_sales
+        FROM sales_invoice si
+        LEFT JOIN users u ON si.salesman = u.user_id
+        WHERE si.company_id = {company_id}
+          AND si.salesman > 0
+          AND si.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+        GROUP BY si.salesman, u.firstname, u.lastname
+        ORDER BY total_sales DESC
+        LIMIT 1;"""
+                return query
 
-        # 7.3 Salesperson with lowest sales
-        if any(phrase in user_question_lower for phrase in [
-            'salesperson with lowest sales', 'worst salesperson',
-            'lowest performing salesperson'
-        ]):
-            print("✓ Hardcoded: Salesperson with lowest sales")
-            query = f"""SELECT
-        CONCAT(u.firstname, ' ', u.lastname) AS salesperson_name,
-        SUM(si.total - COALESCE(si.total_tax, 0)) AS total_sales
-    FROM sales_invoice si
-    LEFT JOIN users u ON si.salesman = u.user_id
-    WHERE si.company_id = {company_id}
-      AND si.salesman > 0
-      AND si.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
-    GROUP BY si.salesman, u.firstname, u.lastname
-    ORDER BY total_sales ASC
-    LIMIT 1;"""
-            return query
+            # 7.3 Salesperson with lowest sales
+            if any(phrase in user_question_lower for phrase in [
+                'salesperson with lowest sales', 'worst salesperson',
+                'lowest performing salesperson'
+            ]):
+                print("✓ Hardcoded: Salesperson with lowest sales")
+                query = f"""SELECT
+            CONCAT(u.firstname, ' ', u.lastname) AS salesperson_name,
+            SUM(si.total - COALESCE(si.total_tax, 0)) AS total_sales
+        FROM sales_invoice si
+        LEFT JOIN users u ON si.salesman = u.user_id
+        WHERE si.company_id = {company_id}
+          AND si.salesman > 0
+          AND si.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
+        GROUP BY si.salesman, u.firstname, u.lastname
+        ORDER BY total_sales ASC
+        LIMIT 1;"""
+                return query
 
-        # ============================================================================
-        # 8. PRODUCT ANALYTICS (Question 21-34) - CRITICAL SECTION
-        # ============================================================================
+            # ============================================================================
+            # 8. PRODUCT ANALYTICS (Question 21-34) - CRITICAL SECTION
+            # ============================================================================
 
-        # 8.1 Top 10 products by quantity (Fast-Moving Items)
-        if any(phrase in user_question_lower for phrase in [
-            'top 10 products by quantity', 'top products by quantity',
-            'fast moving products', 'fast-moving items'
-        ]):
-            print("✓ Hardcoded: Top 10 products by quantity")
-            query = f"""SELECT
-        p.name AS product_name,
-        SUM(ABS(s.quantity)) AS total_sold_qty
-    FROM stock s
-    JOIN products p ON s.product_id = p.product_id
-    JOIN sales_invoice si ON si.invoice_id = s.invoice_id
-    WHERE s.company_id = {company_id}
-      AND s.quantity < 0
-      AND s.stock_type = 'sales'
-      AND si.status != 'canceled'
-    GROUP BY s.product_id, p.name
-    ORDER BY total_sold_qty DESC
-    LIMIT 10;"""
-            return query
+            # 8.1 Top 10 products by quantity (Fast-Moving Items)
+            if any(phrase in user_question_lower for phrase in [
+                'top 10 products by quantity', 'top products by quantity',
+                'fast moving products', 'fast-moving items'
+            ]):
+                print("✓ Hardcoded: Top 10 products by quantity")
+                query = f"""SELECT
+            p.name AS product_name,
+            SUM(ABS(s.quantity)) AS total_sold_qty
+        FROM stock s
+        JOIN products p ON s.product_id = p.product_id
+        JOIN sales_invoice si ON si.invoice_id = s.invoice_id
+        WHERE s.company_id = {company_id}
+          AND s.quantity < 0
+          AND s.stock_type = 'sales'
+          AND si.status != 'canceled'
+        GROUP BY s.product_id, p.name
+        ORDER BY total_sold_qty DESC
+        LIMIT 10;"""
+                return query
 
-        # 8.2 Slow-Moving / Lowest-Selling Products
-        if any(phrase in user_question_lower for phrase in [
-            'slow moving products', 'slow-moving products',
-            'lowest selling products', 'worst selling products'
-        ]):
-            print("✓ Hardcoded: Slow-moving products")
-            query = f"""SELECT
-        p.name AS product_name,
-        SUM(ABS(s.quantity)) AS total_sold_qty
-    FROM stock s
-    JOIN products p ON s.product_id = p.product_id
-    JOIN sales_invoice si ON si.invoice_id = s.invoice_id
-    WHERE s.company_id = {company_id}
-      AND s.quantity < 0
-      AND s.stock_type = 'sales'
-      AND si.status != 'canceled'
-    GROUP BY s.product_id, p.name
-    ORDER BY total_sold_qty ASC
-    LIMIT 10;"""
-            return query
+            # 8.2 Slow-Moving / Lowest-Selling Products
+            if any(phrase in user_question_lower for phrase in [
+                'slow moving products', 'slow-moving products',
+                'lowest selling products', 'worst selling products'
+            ]):
+                print("✓ Hardcoded: Slow-moving products")
+                query = f"""SELECT
+            p.name AS product_name,
+            SUM(ABS(s.quantity)) AS total_sold_qty
+        FROM stock s
+        JOIN products p ON s.product_id = p.product_id
+        JOIN sales_invoice si ON si.invoice_id = s.invoice_id
+        WHERE s.company_id = {company_id}
+          AND s.quantity < 0
+          AND s.stock_type = 'sales'
+          AND si.status != 'canceled'
+        GROUP BY s.product_id, p.name
+        ORDER BY total_sold_qty ASC
+        LIMIT 10;"""
+                return query
 
-        # 8.3 Top 10 products by value
-        if any(phrase in user_question_lower for phrase in [
-            'top 10 products by value', 'top products by value',
-            'highest value products', 'products by value',
-            'products with highest revenue', 'most valuable products',
-            'highest revenue products'
-        ]):
-            print("✓ Hardcoded: Top 10 products by value")
-            query = f"""SELECT
+            # 8.3 Top 10 products by value
+            if any(phrase in user_question_lower for phrase in [
+                'top 10 products by value', 'top products by value',
+                'highest value products', 'products by value',
+                'products with highest revenue', 'most valuable products',
+                'highest revenue products'
+            ]):
+                print("✓ Hardcoded: Top 10 products by value")
+                query = f"""SELECT
         p.name AS product_name,
         SUM(ABS(s.quantity) * (sales_items.price - sales_items.discount)) AS total_sales_value
     FROM stock s
     JOIN products p ON s.product_id = p.product_id
     JOIN sales_invoice si ON si.invoice_id = s.invoice_id
     JOIN sales_items ON sales_items.invoice_id = si.invoice_id
-    WHERE s.company_id = {company_id}
+    WHERE s.company_id = 1336
       AND s.quantity < 0
       AND s.stock_type = 'sales'
       AND si.status != 'canceled'
     GROUP BY s.product_id, p.name
     ORDER BY total_sales_value DESC
     LIMIT 10;"""
-            return query
+                return query
 
-        # 8.4 Category with highest sales
-        if any(phrase in user_question_lower for phrase in [
-            'category with highest sales', 'highest sales category',
-            'best performing category'
-        ]):
-            print("✓ Hardcoded: Category with highest sales")
-            query = f"""SELECT
-        c.title AS category_name,
-        SUM(ABS(s.quantity)) AS total_sold_qty
-    FROM stock s
-    JOIN products p ON p.product_id = s.product_id
-    JOIN products_category c ON c.category_id = p.category_id
-    JOIN sales_invoice si ON si.invoice_id = s.invoice_id
-    WHERE s.company_id = {company_id}
-      AND s.stock_type = 'sales'
-      AND s.quantity < 0
-      AND si.status != 'canceled'
-    GROUP BY c.category_id, c.title
-    ORDER BY total_sold_qty DESC
-    LIMIT 1;"""
-            return query
+            # 8.4 Category with highest sales
+            if any(phrase in user_question_lower for phrase in [
+                'category with highest sales', 'highest sales category',
+                'best performing category'
+            ]):
+                print("✓ Hardcoded: Category with highest sales")
+                query = f"""SELECT
+            c.title AS category_name,
+            SUM(ABS(s.quantity)) AS total_sold_qty
+        FROM stock s
+        JOIN products p ON p.product_id = s.product_id
+        JOIN products_category c ON c.category_id = p.category_id
+        JOIN sales_invoice si ON si.invoice_id = s.invoice_id
+        WHERE s.company_id = {company_id}
+          AND s.stock_type = 'sales'
+          AND s.quantity < 0
+          AND si.status != 'canceled'
+        GROUP BY c.category_id, c.title
+        ORDER BY total_sold_qty DESC
+        LIMIT 1;"""
+                return query
 
-        # 8.5 Category with lowest sales
-        if any(phrase in user_question_lower for phrase in [
-            'category with lowest sales', 'lowest sales category',
-            'worst performing category'
-        ]):
-            print("✓ Hardcoded: Category with lowest sales")
-            query = f"""SELECT
-        c.title AS category_name,
-        SUM(ABS(s.quantity)) AS total_sold_qty
-    FROM stock s
-    JOIN products p ON p.product_id = s.product_id
-    JOIN products_category c ON c.category_id = p.category_id
-    JOIN sales_invoice si ON si.invoice_id = s.invoice_id
-    WHERE s.company_id = {company_id}
-      AND s.stock_type = 'sales'
-      AND s.quantity < 0
-      AND si.status != 'canceled'
-    GROUP BY c.category_id, c.title
-    ORDER BY total_sold_qty ASC
-    LIMIT 1;"""
-            return query
+            # 8.5 Category with lowest sales
+            if any(phrase in user_question_lower for phrase in [
+                'category with lowest sales', 'lowest sales category',
+                'worst performing category'
+            ]):
+                print("✓ Hardcoded: Category with lowest sales")
+                query = f"""SELECT
+            c.title AS category_name,
+            SUM(ABS(s.quantity)) AS total_sold_qty
+        FROM stock s
+        JOIN products p ON p.product_id = s.product_id
+        JOIN products_category c ON c.category_id = p.category_id
+        JOIN sales_invoice si ON si.invoice_id = s.invoice_id
+        WHERE s.company_id = {company_id}
+          AND s.stock_type = 'sales'
+          AND s.quantity < 0
+          AND si.status != 'canceled'
+        GROUP BY c.category_id, c.title
+        ORDER BY total_sold_qty ASC
+        LIMIT 1;"""
+                return query
 
-        # 8.6 Product with highest revenue
-        if any(phrase in user_question_lower for phrase in [
-            'product with highest revenue', 'highest revenue product',
-            'top revenue product'
-        ]):
-            print("✓ Hardcoded: Product with highest revenue")
-            query = f"""SELECT
-        p.name AS product_name,
-        SUM(ABS(s.quantity) * (si_item.price - si_item.discount)) AS total_revenue
-    FROM stock s
-    JOIN products p ON s.product_id = p.product_id
-    JOIN sales_invoice si ON si.invoice_id = s.invoice_id
-    JOIN sales_items si_item ON si_item.invoice_id = si.invoice_id
-    WHERE s.company_id = {company_id}
-      AND s.stock_type = 'sales'
-      AND s.quantity < 0
-      AND si.status != 'canceled'
-    GROUP BY s.product_id, p.name
-    ORDER BY total_revenue DESC
-    LIMIT 1;"""
-            return query
+            # 8.6 Product with highest revenue
+            if any(phrase in user_question_lower for phrase in [
+                'product with highest revenue', 'highest revenue product',
+                'top revenue product'
+            ]):
+                print("✓ Hardcoded: Product with highest revenue")
+                query = f"""SELECT
+            p.name AS product_name,
+            SUM(ABS(s.quantity) * (si_item.price - si_item.discount)) AS total_revenue
+        FROM stock s
+        JOIN products p ON s.product_id = p.product_id
+        JOIN sales_invoice si ON si.invoice_id = s.invoice_id
+        JOIN sales_items si_item ON si_item.invoice_id = si.invoice_id
+        WHERE s.company_id = {company_id}
+          AND s.stock_type = 'sales'
+          AND s.quantity < 0
+          AND si.status != 'canceled'
+        GROUP BY s.product_id, p.name
+        ORDER BY total_revenue DESC
+        LIMIT 1;"""
+                return query
 
-        # 8.7 Product with highest profit
-        if any(phrase in user_question_lower for phrase in [
-            'product with highest profit', 'highest profit product',
-            'most profitable product'
-        ]):
-            print("✓ Hardcoded: Product with highest profit")
-            query = f"""SELECT
-        p.name AS product_name,
-        SUM(ABS(s.quantity) * ((si_item.price - si_item.discount) - s.cost)) AS total_profit
-    FROM stock s
-    JOIN products p ON p.product_id = s.product_id
-    JOIN sales_invoice si ON si.invoice_id = s.invoice_id
-    JOIN sales_items si_item ON si_item.invoice_id = si.invoice_id
-    WHERE s.company_id = {company_id}
-      AND s.stock_type = 'sales'
-      AND s.quantity < 0
-      AND si.status != 'canceled'
-    GROUP BY s.product_id, p.name
-    ORDER BY total_profit DESC
-    LIMIT 1;"""
-            return query
+            # 8.7 Product with highest profit
+            if any(phrase in user_question_lower for phrase in [
+                'product with highest profit', 'highest profit product',
+                'most profitable product'
+            ]):
+                print("✓ Hardcoded: Product with highest profit")
+                query = f"""SELECT
+            p.name AS product_name,
+            SUM(ABS(s.quantity) * ((si_item.price - si_item.discount) - s.cost)) AS total_profit
+        FROM stock s
+        JOIN products p ON p.product_id = s.product_id
+        JOIN sales_invoice si ON si.invoice_id = s.invoice_id
+        JOIN sales_items si_item ON si_item.invoice_id = si.invoice_id
+        WHERE s.company_id = {company_id}
+          AND s.stock_type = 'sales'
+          AND s.quantity < 0
+          AND si.status != 'canceled'
+        GROUP BY s.product_id, p.name
+        ORDER BY total_profit DESC
+        LIMIT 1;"""
+                return query
 
-        # 8.8 Product with lowest revenue
-        if any(phrase in user_question_lower for phrase in [
-            'product with lowest revenue', 'lowest revenue product'
-        ]):
-            print("✓ Hardcoded: Product with lowest revenue")
-            query = f"""SELECT
-        p.name AS product_name,
-        SUM(ABS(s.quantity) * (si_item.price - si_item.discount)) AS total_revenue
-    FROM stock s
-    JOIN products p ON s.product_id = p.product_id
-    JOIN sales_invoice si ON si.invoice_id = s.invoice_id
-    JOIN sales_items si_item ON si_item.invoice_id = si.invoice_id
-    WHERE s.company_id = {company_id}
-      AND s.stock_type = 'sales'
-      AND s.quantity < 0
-      AND si.status != 'canceled'
-    GROUP BY s.product_id, p.name
-    ORDER BY total_revenue ASC
-    LIMIT 1;"""
-            return query
+            # 8.8 Product with lowest revenue
+            if any(phrase in user_question_lower for phrase in [
+                'product with lowest revenue', 'lowest revenue product'
+            ]):
+                print("✓ Hardcoded: Product with lowest revenue")
+                query = f"""SELECT
+            p.name AS product_name,
+            SUM(ABS(s.quantity) * (si_item.price - si_item.discount)) AS total_revenue
+        FROM stock s
+        JOIN products p ON s.product_id = p.product_id
+        JOIN sales_invoice si ON si.invoice_id = s.invoice_id
+        JOIN sales_items si_item ON si_item.invoice_id = si.invoice_id
+        WHERE s.company_id = {company_id}
+          AND s.stock_type = 'sales'
+          AND s.quantity < 0
+          AND si.status != 'canceled'
+        GROUP BY s.product_id, p.name
+        ORDER BY total_revenue ASC
+        LIMIT 1;"""
+                return query
 
-        # 8.9 Product with lowest profit
-        if any(phrase in user_question_lower for phrase in [
-            'product with lowest profit', 'lowest profit product'
-        ]):
-            print("✓ Hardcoded: Product with lowest profit")
-            query = f"""SELECT
-        p.name AS product_name,
-        SUM(ABS(s.quantity) * ((si_item.price - si_item.discount) - s.cost)) AS total_profit
-    FROM stock s
-    JOIN products p ON s.product_id = p.product_id
-    JOIN sales_invoice si ON si.invoice_id = s.invoice_id
-    JOIN sales_items si_item ON si_item.invoice_id = si.invoice_id
-    WHERE s.company_id = {company_id}
-      AND s.stock_type = 'sales'
-      AND s.quantity < 0
-      AND si.status != 'canceled'
-    GROUP BY s.product_id, p.name
-    ORDER BY total_profit ASC
-    LIMIT 1;"""
-            return query
+            # 8.9 Product with lowest profit
+            if any(phrase in user_question_lower for phrase in [
+                'product with lowest profit', 'lowest profit product'
+            ]):
+                print("✓ Hardcoded: Product with lowest profit")
+                query = f"""SELECT
+            p.name AS product_name,
+            SUM(ABS(s.quantity) * ((si_item.price - si_item.discount) - s.cost)) AS total_profit
+        FROM stock s
+        JOIN products p ON s.product_id = p.product_id
+        JOIN sales_invoice si ON si.invoice_id = s.invoice_id
+        JOIN sales_items si_item ON si_item.invoice_id = si.invoice_id
+        WHERE s.company_id = {company_id}
+          AND s.stock_type = 'sales'
+          AND s.quantity < 0
+          AND si.status != 'canceled'
+        GROUP BY s.product_id, p.name
+        ORDER BY total_profit ASC
+        LIMIT 1;"""
+                return query
 
-        # ============================================================================
-        # IF NO HARDCODED QUERY MATCHED, USE LLM
-        # ============================================================================
+            # ============================================================================
+            # IF NO HARDCODED QUERY MATCHED, USE LLM
+            # ============================================================================
 
-        print("✗ No hardcoded pattern matched, using LLM generation")
-        return self._generate_sql_with_llm(user_question, company_id, date_context)
+            print("✗ No hardcoded pattern matched, using LLM generation")
+            return self._generate_sql_with_llm(user_question, company_id, date_context)
 
     def _generate_sql_with_llm(self, user_question, company_id, date_context):
         """Fallback LLM generation for queries not in hardcoded list"""
