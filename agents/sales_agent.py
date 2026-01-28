@@ -179,9 +179,6 @@ CRITICAL BUSINESS RULES (Client-Specific):
                 error_msg += f"**SQL Query:**\n```sql\n{sql_query}\n```"
             return error_msg
 
-        except Exception as e:
-            print(f"Error in process_query: {e}")
-            return f"❌ Error processing query: {str(e)}\n\nPlease try rephrasing your question."
 
     def _extract_date_context(self, message):
         """Extract date range from natural language"""
@@ -405,7 +402,10 @@ CRITICAL BUSINESS RULES (Client-Specific):
         # ============================================================================
 
         # 2.1 Total sales today
-        if any(phrase in user_question_lower for phrase in ['total sales today', 'sales today']):
+        if any(phrase in user_question_lower for phrase in [
+            'total sales today', 'sales today', 'today sales',
+            'sales for today', 'what are my sales today'
+        ]):
             print("✓ Hardcoded: Total sales today")
             query = f"""SELECT
         SUM(sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)) AS total_sales
@@ -453,7 +453,10 @@ CRITICAL BUSINESS RULES (Client-Specific):
             return query
 
         # 2.5 Total returns this month
-        if any(phrase in user_question_lower for phrase in ['total returns this month', 'returns this month']):
+        if any(phrase in user_question_lower for phrase in [
+            'total returns today', 'returns today', 'today returns',
+            'returns for today', 'what are my returns today'
+        ]):
             print("✓ Hardcoded: Total returns this month")
             query = f"""SELECT
         SUM(sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)) AS total_returns
@@ -821,7 +824,9 @@ CRITICAL BUSINESS RULES (Client-Specific):
         # 8.3 Top 10 products by value
         if any(phrase in user_question_lower for phrase in [
             'top 10 products by value', 'top products by value',
-            'highest value products', 'products by value'
+            'highest value products', 'products by value',
+            'products with highest revenue', 'most valuable products',
+            'highest revenue products'
         ]):
             print("✓ Hardcoded: Top 10 products by value")
             query = f"""SELECT
@@ -981,21 +986,35 @@ CRITICAL BUSINESS RULES (Client-Specific):
         """Fallback LLM generation for queries not in hardcoded list"""
 
         prompt = f"""Generate SQL for: "{user_question}"
-Company ID: {company_id}
-Date Filter: {date_context['filter']}
+    Company ID: {company_id}
+    Date Filter: {date_context['filter']}
 
-Use client patterns:
-- Revenue: SUM(si.total - COALESCE(si.total_tax, 0))
-- Status: NOT IN ('draft', 'draft_return', 'return', 'canceled')
-- Customer: c.company (not c.name)
-- Category: pc.title (not pc.name)
+    Use client patterns:
+    - Revenue: SUM(si.total - COALESCE(si.total_tax, 0))
+    - Status: NOT IN ('draft', 'draft_return', 'return', 'canceled')
+    - Customer: c.company (not c.name)
+    - Category: pc.title (not pc.name)
 
-Generate ONLY the SQL query:"""
+    CRITICAL: For product value/profit queries, join sales_items with BOTH invoice_id AND product_id:
+    - JOIN sales_items ON sales_items.invoice_id = si.invoice_id AND sales_items.product_id = s.product_id
+
+    Generate ONLY the SQL query:"""
 
         try:
             sql_query = self._call_groq(prompt, max_tokens=600)
             sql_query = re.sub(r'```sql\n?', '', sql_query)
             sql_query = re.sub(r'```\n?', '', sql_query)
+
+            # FIX: Add product_id join if missing
+            if 'sales_items' in sql_query.lower() and 'stock' in sql_query.lower():
+                if 'sales_items.product_id' not in sql_query and 'si_item.product_id' not in sql_query:
+                    sql_query = re.sub(
+                        r'(JOIN sales_items(?: (?:AS )?si_item)? ON (?:si_item\.)?invoice_id = (?:si\.)?invoice_id)',
+                        r'\1 AND si_item.product_id = s.product_id',
+                        sql_query,
+                        flags=re.IGNORECASE
+                    )
+
             return sql_query.strip()
         except Exception as e:
             print(f"Error in LLM fallback: {e}")
@@ -1071,6 +1090,9 @@ Generate ONLY the SQL query:"""
         # For summaries, use LLM formatting
         return self._format_with_llm(user_question, results, date_context)
 
+    def show_sql_in_response(self):
+        """Debug method to check if SQL is being shown"""
+        return True
     def _format_table_results(self, user_question, results, date_context):
         """Format list results as a clean table - shows ALL records"""
 
