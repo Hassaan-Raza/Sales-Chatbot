@@ -24,7 +24,7 @@ class SalesAgent:
 
         self.api_url = "https://api.groq.com/openai/v1/chat/completions"
         self.model = "llama-3.1-8b-instant"
-        
+
         # Load all hardcoded query templates
         self.query_templates = self._load_query_templates()
 
@@ -79,7 +79,7 @@ class SalesAgent:
                   AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
                   AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
             """,
-            
+
             "sales_this_month": """
                 SELECT SUM(sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)) AS total_sales
                 FROM sales_invoice
@@ -88,7 +88,7 @@ class SalesAgent:
                   AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
                   AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
             """,
-            
+
             "sales_this_year": """
                 SELECT SUM(sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)) AS total_sales
                 FROM sales_invoice
@@ -97,7 +97,7 @@ class SalesAgent:
                   AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
                   AND sales_invoice.status NOT IN ('draft', 'draft_return', 'return', 'canceled')
             """,
-            
+
             # ============================================================================
             # RETURNS QUERIES (Document 1)
             # ============================================================================
@@ -109,7 +109,7 @@ class SalesAgent:
                   AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
                   AND sales_invoice.status = 'return'
             """,
-            
+
             "returns_this_month": """
                 SELECT SUM(sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)) AS total_returns
                 FROM sales_invoice
@@ -118,7 +118,7 @@ class SalesAgent:
                   AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
                   AND sales_invoice.status = 'return'
             """,
-            
+
             "returns_this_year": """
                 SELECT SUM(sales_invoice.total - COALESCE(sales_invoice.total_tax, 0)) AS total_returns
                 FROM sales_invoice
@@ -127,7 +127,7 @@ class SalesAgent:
                   AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
                   AND sales_invoice.status = 'return'
             """,
-            
+
             # ============================================================================
             # NET SALES QUERIES (Document 1)
             # ============================================================================
@@ -143,7 +143,7 @@ class SalesAgent:
                   AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
                   AND sales_invoice.status NOT IN('draft', 'draft_return', 'canceled')
             """,
-            
+
             "net_sales_this_month": """
                 SELECT COALESCE(
                     SUM(CASE
@@ -156,7 +156,7 @@ class SalesAgent:
                   AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
                   AND sales_invoice.status NOT IN('draft', 'draft_return', 'canceled')
             """,
-            
+
             "net_sales_this_year": """
                 SELECT COALESCE(
                     SUM(CASE
@@ -169,7 +169,7 @@ class SalesAgent:
                   AND sales_invoice.invoice_date < CURDATE() + INTERVAL 1 DAY
                   AND sales_invoice.status NOT IN('draft', 'draft_return', 'canceled')
             """,
-            
+
             # ============================================================================
             # COMPARISON QUERIES (Document 1)
             # ============================================================================
@@ -193,7 +193,7 @@ class SalesAgent:
                 FROM sales_invoice
                 WHERE sales_invoice.company_id = {company_id}
             """,
-            
+
             "compare_year": """
                 SELECT
                     COALESCE(SUM(CASE
@@ -214,7 +214,7 @@ class SalesAgent:
                 FROM sales_invoice
                 WHERE sales_invoice.company_id = {company_id}
             """,
-            
+
             # ============================================================================
             # DAY EXTREMES & SUMMARY (Document 1)
             # ============================================================================
@@ -229,7 +229,7 @@ class SalesAgent:
                 ORDER BY total_sales DESC
                 LIMIT 1
             """,
-            
+
             "lowest_sales_day": """
                 SELECT DATE(invoice_date) AS sales_day,
                     SUM(total - COALESCE(total_tax, 0)) AS total_sales
@@ -241,7 +241,7 @@ class SalesAgent:
                 ORDER BY total_sales ASC
                 LIMIT 1
             """,
-            
+
             "total_invoices": """
                 SELECT COUNT(invoice_id) AS total_sales_invoices
                 FROM sales_invoice
@@ -249,7 +249,7 @@ class SalesAgent:
                   AND status NOT IN ('draft', 'draft_return', 'return', 'canceled')
                   {date_filter}
             """,
-            
+
             # ============================================================================
             # SALES TREND (Document 1)
             # ============================================================================
@@ -263,7 +263,7 @@ class SalesAgent:
                 GROUP BY DATE_FORMAT(invoice_date, '%Y-%m')
                 ORDER BY month ASC
             """,
-            
+
             # ============================================================================
             # BRANCH/WAREHOUSE QUERIES (Document 1)
             # ============================================================================
@@ -279,7 +279,7 @@ class SalesAgent:
                 ORDER BY total_sales DESC
                 LIMIT 1
             """,
-            
+
             "lowest_sales_branch": """
                 SELECT w.title AS branch_name,
                     SUM(si.total - COALESCE(si.total_tax, 0)) AS total_sales
@@ -292,7 +292,7 @@ class SalesAgent:
                 ORDER BY total_sales ASC
                 LIMIT 1
             """,
-            
+
             "top_branches": """
                 SELECT w.title AS branch_name,
                     SUM(si.total - COALESCE(si.total_tax, 0)) AS total_sales
@@ -305,7 +305,7 @@ class SalesAgent:
                 ORDER BY total_sales DESC
                 LIMIT {limit}
             """,
-            
+
             # ============================================================================
             # SALESPERSON QUERIES (Document 2)
             # ============================================================================
@@ -321,7 +321,7 @@ class SalesAgent:
                 GROUP BY si.salesman, u.firstname, u.lastname
                 ORDER BY total_sales DESC
             """,
-            
+
             "highest_salesperson": """
                 SELECT CONCAT(u.firstname, ' ', u.lastname) AS salesperson_name,
                     SUM(si.total - COALESCE(si.total_tax, 0)) AS total_sales
@@ -335,7 +335,7 @@ class SalesAgent:
                 ORDER BY total_sales DESC
                 LIMIT 1
             """,
-            
+
             "lowest_salesperson": """
                 SELECT CONCAT(u.firstname, ' ', u.lastname) AS salesperson_name,
                     SUM(si.total - COALESCE(si.total_tax, 0)) AS total_sales
@@ -349,7 +349,7 @@ class SalesAgent:
                 ORDER BY total_sales ASC
                 LIMIT 1
             """,
-            
+
             "top_salespeople": """
                 SELECT CONCAT(u.firstname, ' ', u.lastname) AS salesperson_name,
                     SUM(si.total - COALESCE(si.total_tax, 0)) AS total_sales,
@@ -364,7 +364,7 @@ class SalesAgent:
                 ORDER BY total_sales DESC
                 LIMIT {limit}
             """,
-            
+
             # ============================================================================
             # PRODUCT QUERIES - BY QUANTITY (Document 3)
             # ============================================================================
@@ -383,7 +383,7 @@ class SalesAgent:
                 ORDER BY total_sold_qty DESC
                 LIMIT {limit}
             """,
-            
+
             "slow_moving_products": """
                 SELECT p.name AS product_name,
                     SUM(ABS(s.quantity)) AS total_sold_qty
@@ -399,7 +399,7 @@ class SalesAgent:
                 ORDER BY total_sold_qty ASC
                 LIMIT {limit}
             """,
-            
+
             # ============================================================================
             # CATEGORY QUERIES (Document 3)
             # ============================================================================
@@ -419,7 +419,7 @@ class SalesAgent:
                 ORDER BY total_sold_qty DESC
                 LIMIT 1
             """,
-            
+
             "lowest_sales_category": """
                 SELECT c.title AS category_name,
                     SUM(ABS(s.quantity)) AS total_sold_qty
@@ -436,7 +436,7 @@ class SalesAgent:
                 ORDER BY total_sold_qty ASC
                 LIMIT 1
             """,
-            
+
             "top_categories": """
                 SELECT c.title AS category_name,
                     SUM(ABS(s.quantity)) AS total_sold_qty,
@@ -455,7 +455,7 @@ class SalesAgent:
                 ORDER BY total_sold_qty DESC
                 LIMIT {limit}
             """,
-            
+
             # ============================================================================
             # PRODUCT QUERIES - BY REVENUE & PROFIT (Document 3)
             # ============================================================================
@@ -475,7 +475,7 @@ class SalesAgent:
                 ORDER BY total_revenue DESC
                 LIMIT {limit}
             """,
-            
+
             "highest_revenue_product": """
                 SELECT p.name AS product_name,
                     SUM(ABS(s.quantity) * (si_item.price - si_item.discount)) AS total_revenue
@@ -492,7 +492,7 @@ class SalesAgent:
                 ORDER BY total_revenue DESC
                 LIMIT 1
             """,
-            
+
             "lowest_revenue_product": """
                 SELECT p.name AS product_name,
                     SUM(ABS(s.quantity) * (si_item.price - si_item.discount)) AS total_revenue
@@ -509,7 +509,7 @@ class SalesAgent:
                 ORDER BY total_revenue ASC
                 LIMIT 1
             """,
-            
+
             "highest_profit_product": """
                 SELECT p.name AS product_name,
                     SUM(ABS(s.quantity) * ((si_item.price - si_item.discount) - s.cost)) AS total_profit
@@ -526,7 +526,7 @@ class SalesAgent:
                 ORDER BY total_profit DESC
                 LIMIT 1
             """,
-            
+
             "lowest_profit_product": """
                 SELECT p.name AS product_name,
                     SUM(ABS(s.quantity) * ((si_item.price - si_item.discount) - s.cost)) AS total_profit
@@ -543,7 +543,7 @@ class SalesAgent:
                 ORDER BY total_profit ASC
                 LIMIT 1
             """,
-            
+
             "top_products_by_profit": """
                 SELECT p.name AS product_name,
                     SUM(ABS(s.quantity) * ((si_item.price - si_item.discount) - s.cost)) AS total_profit,
@@ -561,7 +561,7 @@ class SalesAgent:
                 ORDER BY total_profit DESC
                 LIMIT {limit}
             """,
-            
+
             # ============================================================================
             # CUSTOMER QUERIES (Document 4)
             # ============================================================================
@@ -577,7 +577,7 @@ class SalesAgent:
                 ORDER BY total_revenue DESC
                 LIMIT {limit}
             """,
-            
+
             "lowest_revenue_customers": """
                 SELECT c.company AS customer_name,
                     SUM(si.total - COALESCE(si.total_tax, 0)) AS total_revenue
@@ -590,7 +590,7 @@ class SalesAgent:
                 ORDER BY total_revenue ASC
                 LIMIT {limit}
             """,
-            
+
             "customer_wise_sales": """
                 SELECT c.company AS customer_name,
                     COUNT(si.invoice_id) AS total_invoices,
@@ -606,7 +606,7 @@ class SalesAgent:
                 ORDER BY net_sales DESC
                 LIMIT {limit}
             """,
-            
+
             "inactive_customers_30_days": """
                 SELECT c.company AS customer_name,
                     MAX(si_all.invoice_date) AS last_invoice_date
@@ -628,7 +628,7 @@ class SalesAgent:
                 ORDER BY last_invoice_date DESC
                 LIMIT {limit}
             """,
-            
+
             "inactive_customers_60_days": """
                 SELECT c.company AS customer_name,
                     MAX(si_all.invoice_date) AS last_invoice_date
@@ -650,7 +650,7 @@ class SalesAgent:
                 ORDER BY last_invoice_date DESC
                 LIMIT {limit}
             """,
-            
+
             "inactive_customers_90_days": """
                 SELECT c.company AS customer_name,
                     MAX(si_all.invoice_date) AS last_invoice_date
@@ -676,10 +676,10 @@ class SalesAgent:
 
     def _classify_intent(self, message):
         """Use LLM to classify user intent and extract parameters"""
-        
+
         # List all available query types
         available_queries = list(self.query_templates.keys())
-        
+
         prompt = f"""Analyze this sales query and classify the intent.
 
 USER QUERY: "{message}"
@@ -691,24 +691,30 @@ Extract and return ONLY a JSON object:
 {{
     "query_type": "<one of the available query types>",
     "time_period": "<today|this_month|this_year|last_X_days|all_time>",
-    "limit": <number if specified like "top 5", "top 10", otherwise 10>,
+    "limit": <number if specified like "top 5", "top 10", otherwise 10 or 20 for inactive customers>,
     "days": <number of days if applicable>,
     "confidence": <0.0 to 1.0>
 }}
 
-MATCHING RULES:
+CRITICAL MATCHING RULES (MUST FOLLOW):
+- "haven't bought" / "haven't purchased" / "not bought" / "not purchased" / "inactive" → inactive_customers_XX_days
+- "customers who haven't bought in a month" → inactive_customers_30_days (limit=20, days=30)
+- "customers who haven't bought in 60 days" → inactive_customers_60_days (limit=20, days=60)
+- "customers who haven't bought in 90 days" → inactive_customers_90_days (limit=20, days=90)
 - "returns today" → returns_today
 - "sales this month" → sales_this_month  
 - "top 5 products by value/revenue/money" → top_products_by_revenue (limit=5)
 - "top products by quantity/units sold" → top_products_by_quantity
 - "most profitable products" → top_products_by_profit
-- "inactive customers 60 days" → inactive_customers_60_days
 - "slow moving products" → slow_moving_products
 - "best salesperson" → highest_salesperson
 - "worst branch" → lowest_sales_branch
 - "sales trend" → sales_trend_12_months
 - "compare this month vs last month" → compare_month
 - "net sales" → net_sales_[period]
+- "customer-wise sales" / "sales by customer" → customer_wise_sales
+
+IMPORTANT: If query mentions "haven't", "not purchased", "inactive", it's about INACTIVE CUSTOMERS, not customer_wise_sales!
 
 Return ONLY the JSON, no other text."""
 
@@ -717,19 +723,24 @@ Return ONLY the JSON, no other text."""
             response = response.strip()
             response = re.sub(r'^```json\s*', '', response)
             response = re.sub(r'\s*```$', '', response)
-            
+
             intent = json.loads(response)
-            
+
             if intent.get('query_type') not in self.query_templates:
                 print(f"⚠️ Unknown query type: {intent.get('query_type')}, defaulting")
                 intent['query_type'] = 'sales_this_month'
-            
-            intent.setdefault('limit', 10)
+
+            # Set defaults based on query type
+            if 'inactive_customers' in intent.get('query_type', ''):
+                intent.setdefault('limit', 20)  # More results for inactive customers
+            else:
+                intent.setdefault('limit', 10)
+
             intent.setdefault('days', 30)
             intent.setdefault('confidence', 0.0)
-            
+
             return intent
-            
+
         except Exception as e:
             print(f"Error classifying intent: {e}")
             return {
@@ -773,14 +784,14 @@ Return ONLY the JSON, no other text."""
             # Step 1: LLM classifies intent
             intent = self._classify_intent(message)
             print(f"🎯 Intent: {json.dumps(intent, indent=2)}")
-            
+
             # Step 2: Get hardcoded SQL template
             query_type = intent['query_type']
             sql_template = self.query_templates[query_type]
-            
+
             # Step 3: Build date filter
             date_filter = self._get_date_filter(intent['time_period'])
-            
+
             # Step 4: Format SQL with parameters
             sql_query = sql_template.format(
                 company_id=company_id,
@@ -788,27 +799,27 @@ Return ONLY the JSON, no other text."""
                 days=intent['days'],
                 date_filter=date_filter
             )
-            
+
             print(f"📝 Query type: {query_type}")
             print(f"🔍 SQL:\n{sql_query.strip()}")
-            
+
             # Step 5: Execute
             result = db.execute_query(sql_query, ())
-            
+
             # Step 6: Format results
             date_label = self._get_date_label(intent['time_period'])
             formatted_response = self._format_results(
                 message, result, {'label': date_label}, query_type
             )
-            
+
             # Add transparency
             formatted_response += f"\n\n---\n**🎯 Query Type:** `{query_type}`"
             formatted_response += f"\n**📊 Limit:** {intent['limit']}"
             formatted_response += f"\n**🔍 Confidence:** {intent['confidence']:.0%}"
             formatted_response += f"\n\n**SQL:**\n```sql\n{sql_query.strip()}\n```"
-            
+
             return formatted_response
-            
+
         except Exception as e:
             print(f"❌ Error: {e}")
             error_msg = f"❌ Error: {str(e)}\n\n"
@@ -818,56 +829,138 @@ Return ONLY the JSON, no other text."""
 
     def _format_results(self, user_question, results, date_context, query_type):
         """Format results using LLM"""
-        
+
         if not results or len(results) == 0:
             return f"ℹ️ **No data found.**\n**📅 Period:** {date_context['label']}"
 
         results_json = json.dumps(results[:20], default=str, indent=2)
-        
-        prompt = f"""Format this sales data into a clear summary.
+
+        prompt = f"""Format this sales data into a clean, readable summary. DO NOT return JSON.
 
 USER QUESTION: {user_question}
 QUERY TYPE: {query_type}
 PERIOD: {date_context['label']}
-RESULTS:
+
+DATA:
 {results_json}
 
-RULES:
-1. Bold header with emoji
-2. For single values: clean metric card
-3. For lists: formatted table
-4. Money: $1,234.56 | Quantities: 1,234 units | Counts: 1,234
-5. Add ONE brief actionable insight
-6. Keep concise
+CRITICAL RULES:
+1. Return PLAIN TEXT with markdown formatting - NO JSON!
+2. Start with bold header with emoji (e.g., "📊 **Returns Summary for Today**")
+3. For single metric: Show as "💰 **Total Returns:** $1,234.56"
+4. For lists/tables: Use markdown table or numbered list
+5. Format numbers correctly:
+   - Money: $1,234.56
+   - Quantities: 1,234 units
+   - Counts: 1,234
+6. End with one actionable insight (⚡ **Insight:** ...)
+7. Keep it concise and scannable
+8. DO NOT wrap response in JSON - just return the formatted text directly
 
-Generate summary:"""
+EXAMPLE OUTPUT (for returns):
+📊 **Returns Summary for Today**
+
+💰 **Total Returns:** $0.00
+
+⚡ **Insight:** No returns today - great customer satisfaction!
+
+EXAMPLE OUTPUT (for customer list):
+👥 **Inactive Customers (Last 30 Days)**
+
+| Customer Name | Last Purchase Date | Days Ago |
+|--------------|-------------------|----------|
+| ABC Company | 2025-12-15 | 44 days |
+| XYZ Corp | 2025-11-28 | 61 days |
+
+⚡ **Insight:** Reach out to these customers with special offers to re-engage them.
+
+Now format the data above:"""
 
         try:
             formatted_text = self._call_groq(prompt, max_tokens=800)
+
+            # Clean up any JSON that might have leaked through
+            formatted_text = formatted_text.strip()
+
+            # Remove JSON code blocks if present
+            if formatted_text.startswith('```json'):
+                formatted_text = formatted_text.replace('```json', '').replace('```', '').strip()
+
+            # If it still looks like JSON, use basic format instead
+            if formatted_text.startswith('{') or formatted_text.startswith('['):
+                print("⚠️ LLM returned JSON despite instructions, using basic format")
+                return self._basic_format(results, date_context)
+
             return formatted_text
+
         except Exception as e:
             print(f"Formatting error: {e}")
             return self._basic_format(results, date_context)
 
     def _basic_format(self, results, date_context):
-        """Fallback formatting"""
-        response = f"**📊 RESULTS** | **📅 {date_context['label']}**\n\n"
-        
+        """Fallback formatting - clean readable output"""
+        response = f"**📊 Query Results**\n**📅 Period:** {date_context['label']}\n\n"
+
         if len(results) == 1:
-            for key, value in results[0].items():
+            # Single row result (like totals)
+            result = results[0]
+            for key, value in result.items():
                 formatted_key = key.replace('_', ' ').title()
-                if isinstance(value, (int, float)):
-                    if any(k in key.lower() for k in ['revenue', 'sales', 'total', 'amount']):
+
+                if value is None:
+                    response += f"**{formatted_key}:** N/A\n"
+                elif isinstance(value, (int, float)):
+                    # Determine formatting based on field name
+                    if any(k in key.lower() for k in ['revenue', 'sales', 'total', 'amount', 'price', 'cost', 'profit']):
                         response += f"💰 **{formatted_key}:** ${value:,.2f}\n"
+                    elif any(k in key.lower() for k in ['quantity', 'qty', 'units', 'sold']):
+                        response += f"📦 **{formatted_key}:** {int(value):,} units\n"
+                    elif any(k in key.lower() for k in ['count', 'invoices', 'orders', 'customers']):
+                        response += f"📊 **{formatted_key}:** {int(value):,}\n"
+                    elif 'percent' in key.lower() or 'pct' in key.lower():
+                        response += f"📈 **{formatted_key}:** {value:.2f}%\n"
                     else:
-                        response += f"**{formatted_key}:** {value:,.0f}\n"
+                        response += f"**{formatted_key}:** {value:,.2f}\n"
+                elif 'date' in key.lower():
+                    response += f"📅 **{formatted_key}:** {value}\n"
                 else:
                     response += f"**{formatted_key}:** {value}\n"
+
         else:
-            for idx, row in enumerate(results[:10], 1):
-                items = [f"{k}: {v}" for k, v in row.items()]
-                response += f"{idx}. " + " | ".join(items) + "\n"
-        
+            # Multiple rows - show as table
+            response += f"**Found {len(results)} results:**\n\n"
+
+            # Get column names
+            if results:
+                headers = list(results[0].keys())
+                formatted_headers = [h.replace('_', ' ').title() for h in headers]
+
+                # Create markdown table
+                response += "| " + " | ".join(formatted_headers) + " |\n"
+                response += "|" + "|".join(["---" for _ in headers]) + "|\n"
+
+                # Add rows (limit to 10 for readability)
+                for row in results[:10]:
+                    cells = []
+                    for key, value in row.items():
+                        if value is None:
+                            cells.append("N/A")
+                        elif isinstance(value, (int, float)):
+                            if any(k in key.lower() for k in ['revenue', 'sales', 'total', 'amount', 'price', 'cost', 'profit']):
+                                cells.append(f"${value:,.2f}")
+                            elif any(k in key.lower() for k in ['quantity', 'qty', 'units']):
+                                cells.append(f"{int(value):,} units")
+                            elif any(k in key.lower() for k in ['count', 'invoices', 'orders']):
+                                cells.append(f"{int(value):,}")
+                            else:
+                                cells.append(f"{value:,.2f}")
+                        else:
+                            cells.append(str(value))
+                    response += "| " + " | ".join(cells) + " |\n"
+
+                if len(results) > 10:
+                    response += f"\n*Showing 10 of {len(results)} results*\n"
+
         return response
 
     # Compatibility methods
@@ -886,4 +979,4 @@ Generate summary:"""
 
 if __name__ == "__main__":
     agent = SalesAgent()
-    
+
